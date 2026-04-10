@@ -6,6 +6,16 @@
 - lock MVP scope
 - define pricing
 - define core scoring rules
+- define HubSpot data contract
+- define pilot event model
+
+## Phase 0.5 - Executable specification
+
+- finalize scoring thresholds by pipeline profile
+- lock required scopes and object mappings
+- define reason taxonomy
+- define next-best-action mapping
+- define pilot dashboards and baseline queries
 
 ## Phase 1 - Pilot build
 

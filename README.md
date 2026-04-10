@@ -7,6 +7,10 @@ This repository contains the initial product foundation for **Pipeline Rescue**,
 - `pipeline-rescue/README.md`: product overview
 - `pipeline-rescue/docs/market-audit.md`: market and wedge analysis
 - `pipeline-rescue/docs/mvp-spec.md`: MVP functional specification
+- `pipeline-rescue/docs/scoring-spec.md`: deterministic rescue score logic
+- `pipeline-rescue/docs/hubspot-data-contract.md`: build-time data contract
+- `pipeline-rescue/docs/icp.md`: initial customer profile
+- `pipeline-rescue/docs/pilot-instrumentation.md`: pilot metrics and events
 - `pipeline-rescue/docs/roadmap.md`: build and go-to-market roadmap
 - `pipeline-rescue/site/`: static presentation page
 
@@ -26,5 +30,6 @@ This repository is the factory-mode product foundation:
 
 - positioning locked
 - MVP scope locked
-- technical direction locked
-- launch assets ready for iteration
+- scoring framework specified
+- HubSpot data contract specified
+- pilot instrumentation specified

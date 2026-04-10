@@ -33,12 +33,19 @@ The first version should include:
 - task creation inside HubSpot
 - workflow action to analyze a deal
 
+Supporting specs:
+
+- `docs/scoring-spec.md`
+- `docs/hubspot-data-contract.md`
+- `docs/icp.md`
+- `docs/pilot-instrumentation.md`
+
 ## Target customer
 
-- B2B sales teams
-- agencies
-- SaaS companies
-- services firms with a real HubSpot pipeline
+- initial ICP: B2B SaaS teams on HubSpot
+- 5 to 30 quota-carrying reps
+- active pipeline discipline
+- enough volume to expose stalled deals clearly
 
 ## Commercial model
 
@@ -47,3 +54,15 @@ The first version should include:
 - Team: EUR799/month
 
 Pricing should be per HubSpot portal with clear usage caps.
+
+## Current stage
+
+The project is no longer only a positioning deck.
+
+It now has:
+
+- market wedge
+- MVP boundary
+- deterministic scoring spec
+- HubSpot data contract
+- pilot instrumentation model
