@@ -1,0 +1,338 @@
+{
+  "defaultScenario": "critical-stalled",
+  "scenarios": {
+    "critical-stalled": {
+      "meta": {
+        "appName": "Pipeline Rescue",
+        "version": "0.2.0",
+        "generatedAt": "2026-04-10T18:00:00Z",
+        "portalName": "Acme Revenue Demo",
+        "scenarioLabel": "Critical stalled deal",
+        "scenarioDescription": "Happy-path rescue case with a severe score, a valid draft, and a queue full of urgent work."
+      },
+      "summary": {
+        "analyzedDeals": 42,
+        "atRiskDeals": 17,
+        "criticalDeals": 4,
+        "engagedRescues": 6,
+        "recoveredRevenueCandidate": 146000
+      },
+      "verification": {
+        "memoryProtocol": "CYCLE_ISOLATED",
+        "validationStatus": "VALIDATED",
+        "stabilityScore": 9.34,
+        "hallucinationRisk": "LOW",
+        "unverifiedFields": [],
+        "correctionsApplied": [
+          "Clamped evidence to CRM-backed fields only.",
+          "Removed any outreach claim not present on the record."
+        ],
+        "notes": "Draft is allowed because the record has enough evidence and contact coverage."
+      },
+      "queue": [
+        {
+          "dealId": "DL-1001",
+          "dealName": "Acme Expansion",
+          "owner": "Sarah Lane",
+          "rescueScore": 82,
+          "riskLevel": "CRITICAL",
+          "topReason": "ACTIVITY_STALE",
+          "lastActivityAgeDays": 19,
+          "hasNextStep": false,
+          "nextBestAction": "Send direct follow-up and create a same-day review task."
+        },
+        {
+          "dealId": "DL-1002",
+          "dealName": "Northwind Platform Upgrade",
+          "owner": "David Kerr",
+          "rescueScore": 71,
+          "riskLevel": "HIGH",
+          "topReason": "STAGE_AGING",
+          "lastActivityAgeDays": 11,
+          "hasNextStep": true,
+          "nextBestAction": "Escalate deal review with manager and re-qualify timeline."
+        },
+        {
+          "dealId": "DL-1003",
+          "dealName": "Helios Security Renewal",
+          "owner": "Mina Patel",
+          "rescueScore": 58,
+          "riskLevel": "HIGH",
+          "topReason": "DECISION_MAKER_MISSING",
+          "lastActivityAgeDays": 9,
+          "hasNextStep": false,
+          "nextBestAction": "Add a decision-maker contact before sending the next follow-up."
+        }
+      ],
+      "focusedDeal": {
+        "dealId": "DL-1001",
+        "dealName": "Acme Expansion",
+        "company": "Acme",
+        "owner": "Sarah Lane",
+        "eligibility": "ELIGIBLE",
+        "rescueScore": 82,
+        "riskLevel": "CRITICAL",
+        "analyzedAt": "2026-04-10T17:55:00Z",
+        "freshUntil": "2026-04-10T18:10:00Z",
+        "reasons": [
+          {
+            "code": "ACTIVITY_STALE",
+            "label": "Deal activity is stale",
+            "weight": 24,
+            "evidence": "No logged activity for 19 days."
+          },
+          {
+            "code": "NO_FUTURE_TASK",
+            "label": "No future task is scheduled",
+            "weight": 20,
+            "evidence": "The deal owner has no open future task on the record."
+          },
+          {
+            "code": "NEXT_STEP_MISSING",
+            "label": "Next step is missing",
+            "weight": 20,
+            "evidence": "The deal record has no concrete next step."
+          }
+        ],
+        "recommendedAction": {
+          "type": "FOLLOW_UP_EMAIL",
+          "priority": "HIGH",
+          "summary": "Send a direct follow-up with a concrete scheduling ask and create a same-day task."
+        },
+        "draft": {
+          "eligible": true,
+          "subject": "Quick follow-up on next steps for Acme Expansion",
+          "body": "Hi Sarah, following up on next steps for Acme Expansion. We have not logged activity recently and there is no review on the calendar. Are you available tomorrow or Friday for a 20-minute decision review?",
+          "blockedReason": null
+        }
+      }
+    },
+    "draft-blocked": {
+      "meta": {
+        "appName": "Pipeline Rescue",
+        "version": "0.2.0",
+        "generatedAt": "2026-04-10T18:02:00Z",
+        "portalName": "Acme Revenue Demo",
+        "scenarioLabel": "Draft blocked by hygiene gap",
+        "scenarioDescription": "The engine can score the deal, but the AI layer must block the draft because the CRM record is too weak."
+      },
+      "summary": {
+        "analyzedDeals": 42,
+        "atRiskDeals": 19,
+        "criticalDeals": 5,
+        "engagedRescues": 5,
+        "recoveredRevenueCandidate": 162000
+      },
+      "verification": {
+        "memoryProtocol": "CYCLE_ISOLATED",
+        "validationStatus": "VALIDATED",
+        "stabilityScore": 9.21,
+        "hallucinationRisk": "MEDIUM",
+        "unverifiedFields": [
+          "primary_contact_email",
+          "decision_maker_contact"
+        ],
+        "correctionsApplied": [
+          "Blocked draft generation because the recipient identity is incomplete.",
+          "Forced deterministic remediation action instead of speculative copy."
+        ],
+        "notes": "This case exercises anti-hallucination behavior under incomplete CRM hygiene."
+      },
+      "queue": [
+        {
+          "dealId": "DL-2001",
+          "dealName": "BlueOrbit Expansion",
+          "owner": "Nora Chen",
+          "rescueScore": 74,
+          "riskLevel": "HIGH",
+          "topReason": "CRM_HYGIENE_GAP",
+          "lastActivityAgeDays": 8,
+          "hasNextStep": false,
+          "nextBestAction": "Fix contact coverage and ownership data before outreach."
+        },
+        {
+          "dealId": "DL-2002",
+          "dealName": "Vertex Rollout",
+          "owner": "Leo Morris",
+          "rescueScore": 69,
+          "riskLevel": "HIGH",
+          "topReason": "CONTACT_COVERAGE_LOW",
+          "lastActivityAgeDays": 13,
+          "hasNextStep": true,
+          "nextBestAction": "Add a decision maker and re-run analysis."
+        }
+      ],
+      "focusedDeal": {
+        "dealId": "DL-2001",
+        "dealName": "BlueOrbit Expansion",
+        "company": "BlueOrbit",
+        "owner": "Nora Chen",
+        "eligibility": "ELIGIBLE",
+        "rescueScore": 74,
+        "riskLevel": "HIGH",
+        "analyzedAt": "2026-04-10T17:58:00Z",
+        "freshUntil": "2026-04-10T18:13:00Z",
+        "reasons": [
+          {
+            "code": "CRM_HYGIENE_GAP",
+            "label": "CRM hygiene gap blocks safe outreach",
+            "weight": 18,
+            "evidence": "Primary contact email is missing and the deal owner is not mapped to a valid contact."
+          },
+          {
+            "code": "CONTACT_COVERAGE_LOW",
+            "label": "Contact coverage is too low",
+            "weight": 10,
+            "evidence": "Only one contact is associated to the deal."
+          },
+          {
+            "code": "DECISION_MAKER_MISSING",
+            "label": "Decision maker is missing",
+            "weight": 10,
+            "evidence": "No contact is tagged as decision maker or economic buyer."
+          }
+        ],
+        "recommendedAction": {
+          "type": "FILL_CRM_GAP",
+          "priority": "HIGH",
+          "summary": "Repair contact coverage and add a decision maker before generating any customer-facing draft."
+        },
+        "draft": {
+          "eligible": false,
+          "subject": null,
+          "body": null,
+          "blockedReason": "CRM_HYGIENE_GAP"
+        }
+      }
+    },
+    "insufficient-data": {
+      "meta": {
+        "appName": "Pipeline Rescue",
+        "version": "0.2.0",
+        "generatedAt": "2026-04-10T18:04:00Z",
+        "portalName": "Acme Revenue Demo",
+        "scenarioLabel": "Insufficient data",
+        "scenarioDescription": "The product refuses to over-claim when key CRM facts are missing. It marks the analysis as unverified."
+      },
+      "summary": {
+        "analyzedDeals": 42,
+        "atRiskDeals": 11,
+        "criticalDeals": 2,
+        "engagedRescues": 4,
+        "recoveredRevenueCandidate": 97000
+      },
+      "verification": {
+        "memoryProtocol": "CYCLE_ISOLATED",
+        "validationStatus": "UNVERIFIED",
+        "stabilityScore": 8.94,
+        "hallucinationRisk": "HIGH",
+        "unverifiedFields": [
+          "amount",
+          "next_step",
+          "last_activity",
+          "associated_contacts"
+        ],
+        "correctionsApplied": [
+          "Suppressed numeric score because the minimum signal set is missing.",
+          "Returned remediation-only guidance."
+        ],
+        "notes": "This is the anti-hallucination fail-safe: the system must not invent certainty."
+      },
+      "queue": [
+        {
+          "dealId": "DL-3001",
+          "dealName": "Nimbus Migration",
+          "owner": "Owen Grant",
+          "rescueScore": null,
+          "riskLevel": "UNKNOWN",
+          "topReason": "INSUFFICIENT_DATA",
+          "lastActivityAgeDays": null,
+          "hasNextStep": false,
+          "nextBestAction": "Populate core fields before trusting any rescue score."
+        }
+      ],
+      "focusedDeal": {
+        "dealId": "DL-3001",
+        "dealName": "Nimbus Migration",
+        "company": "Nimbus",
+        "owner": "Owen Grant",
+        "eligibility": "INSUFFICIENT_DATA",
+        "rescueScore": null,
+        "riskLevel": "UNKNOWN",
+        "analyzedAt": "2026-04-10T18:04:00Z",
+        "freshUntil": "2026-04-10T18:19:00Z",
+        "reasons": [],
+        "recommendedAction": {
+          "type": "FILL_CRM_GAP",
+          "priority": "MEDIUM",
+          "summary": "Add deal amount, last activity, and at least one verified contact before analysis."
+        },
+        "draft": {
+          "eligible": false,
+          "subject": null,
+          "body": null,
+          "blockedReason": "INSUFFICIENT_DATA"
+        }
+      }
+    },
+    "healthy-monitored": {
+      "meta": {
+        "appName": "Pipeline Rescue",
+        "version": "0.2.0",
+        "generatedAt": "2026-04-10T18:06:00Z",
+        "portalName": "Acme Revenue Demo",
+        "scenarioLabel": "Healthy monitored deal",
+        "scenarioDescription": "Low-risk deal with a valid next step. Used to verify that the product stays calm and does not create fake urgency."
+      },
+      "summary": {
+        "analyzedDeals": 42,
+        "atRiskDeals": 9,
+        "criticalDeals": 1,
+        "engagedRescues": 7,
+        "recoveredRevenueCandidate": 81000
+      },
+      "verification": {
+        "memoryProtocol": "CYCLE_ISOLATED",
+        "validationStatus": "VALIDATED",
+        "stabilityScore": 9.48,
+        "hallucinationRisk": "LOW",
+        "unverifiedFields": [],
+        "correctionsApplied": [
+          "Suppressed escalation language because the deal is healthy."
+        ],
+        "notes": "This case protects against false positives and operator fatigue."
+      },
+      "queue": [],
+      "focusedDeal": {
+        "dealId": "DL-4001",
+        "dealName": "Summit Renewal",
+        "company": "Summit",
+        "owner": "Jules Hart",
+        "eligibility": "ELIGIBLE",
+        "rescueScore": 18,
+        "riskLevel": "LOW",
+        "analyzedAt": "2026-04-10T18:05:00Z",
+        "freshUntil": "2026-04-10T18:20:00Z",
+        "reasons": [
+          {
+            "code": "STAGE_AGING",
+            "label": "Stage age is normal but monitored",
+            "weight": 6,
+            "evidence": "The deal has been in stage for 7 days, within expected range."
+          }
+        ],
+        "recommendedAction": {
+          "type": "CREATE_NEXT_STEP_TASK",
+          "priority": "LOW",
+          "summary": "Keep the scheduled check-in and avoid unnecessary intervention."
+        },
+        "draft": {
+          "eligible": true,
+          "subject": "Confirming our scheduled renewal review",
+          "body": "Hi Jules, confirming that the renewal review remains on track for next Tuesday. No action needed from your side before then.",
+          "blockedReason": null
+        }
+      }
+    }
+  }
+}

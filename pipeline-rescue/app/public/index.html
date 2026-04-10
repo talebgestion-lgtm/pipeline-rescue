@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pipeline Rescue Starter</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Pipeline Rescue Starter</p>
+          <h1>Control room for stalled-deal recovery.</h1>
+          <p class="lede">
+            Local executable demo for the HubSpot-native rescue workflow: score, reasons,
+            next best action, draft, and rescue queue.
+          </p>
+        </div>
+
+        <div class="status-card" id="meta-card">
+          <p class="status-label">Loading</p>
+          <p class="status-value">Fetching demo state</p>
+        </div>
+      </section>
+
+      <section class="control-strip">
+        <article class="scenario-card">
+          <label class="eyebrow" for="scenario-select">Stress Scenario</label>
+          <select id="scenario-select" class="scenario-select" aria-label="Stress scenario"></select>
+          <p class="scenario-description" id="scenario-description">Loading scenarios...</p>
+        </article>
+        <button type="button" id="refresh-button" class="refresh-button">Reload Snapshot</button>
+      </section>
+
+      <section class="summary-grid" id="summary-grid"></section>
+
+      <section class="layout-grid">
+        <article class="panel">
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Focused Deal</p>
+              <h2 id="deal-title">Loading...</h2>
+            </div>
+            <div class="risk-pill" id="risk-pill">--</div>
+          </header>
+
+          <div class="score-row">
+            <div class="score-block">
+              <span class="score-label">Rescue score</span>
+              <span class="score-value" id="score-value">--</span>
+            </div>
+            <div class="score-block">
+              <span class="score-label">Recommended action</span>
+              <span class="score-text" id="action-summary">Loading...</span>
+            </div>
+          </div>
+
+          <p class="deal-freshness" id="deal-freshness">Loading analysis freshness...</p>
+
+          <section class="stack" id="reasons-list"></section>
+
+          <section class="draft-panel">
+            <p class="eyebrow">Draft</p>
+            <h3 id="draft-subject">Loading...</h3>
+            <p id="draft-body" class="draft-body"></p>
+          </section>
+        </article>
+
+        <aside class="panel">
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Guardrails</p>
+              <h2>AI verification</h2>
+            </div>
+          </header>
+          <div class="verification-card" id="verification-card"></div>
+
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Rescue Queue</p>
+              <h2>Highest-risk deals</h2>
+            </div>
+          </header>
+          <div class="queue" id="queue-list"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

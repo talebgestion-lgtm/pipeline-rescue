@@ -37,8 +37,13 @@ Supporting specs:
 
 - `docs/scoring-spec.md`
 - `docs/hubspot-data-contract.md`
+- `docs/analysis-result-schema.md`
+- `docs/ai-guardrails.md`
+- `docs/apocalypse-audit.md`
+- `docs/hubspot-surface-spec.md`
 - `docs/icp.md`
 - `docs/pilot-instrumentation.md`
+- `docs/technical-architecture.md`
 
 ## Target customer
 
@@ -66,3 +71,6 @@ It now has:
 - deterministic scoring spec
 - HubSpot data contract
 - pilot instrumentation model
+- technical architecture
+- starter executable demo with stress scenarios
+- imported anti-memory and anti-hallucination guardrails translated into product rules
