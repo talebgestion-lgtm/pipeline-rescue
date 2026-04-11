@@ -14,6 +14,19 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function escapeCsv(value) {
+  if (value == null) {
+    return "";
+  }
+
+  const text = String(value);
+  if (text.includes(",") || text.includes("\"") || text.includes("\n")) {
+    return `"${text.replace(/"/g, "\"\"")}"`;
+  }
+
+  return text;
+}
+
 function toSerializableState(state) {
   return {
     sequence: state.sequence,
@@ -117,7 +130,9 @@ function createRuntime(fixtures, options = {}) {
     const state = ensureScenarioState(scenarioId);
     return state.feedbackStates.get(dealId) || {
       status: "NO_FEEDBACK",
-      updatedAt: null
+      updatedAt: null,
+      reasonCode: null,
+      note: null
     };
   }
 
@@ -341,7 +356,7 @@ function createRuntime(fixtures, options = {}) {
     };
   }
 
-  function recordFeedback(scenarioId, dealId, status) {
+  function recordFeedback(scenarioId, dealId, status, options = {}) {
     const analysis = getAnalysis(scenarioId, dealId);
 
     if (!analysis) {
@@ -351,7 +366,9 @@ function createRuntime(fixtures, options = {}) {
     const state = ensureScenarioState(scenarioId);
     const feedbackState = {
       status,
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      reasonCode: options.reasonCode || null,
+      note: options.note || null
     };
     const feedbackEntry = {
       feedbackId: `fb_${String(state.sequence).padStart(4, "0")}`,
@@ -365,7 +382,9 @@ function createRuntime(fixtures, options = {}) {
         ? analysis.analysis.recommendedAction.type
         : "UNKNOWN",
       rescueScore: analysis.analysis.rescueScore,
-      validationStatus: analysis.verification.validationStatus
+      validationStatus: analysis.verification.validationStatus,
+      operatorReasonCode: feedbackState.reasonCode,
+      operatorNote: feedbackState.note
     };
 
     state.sequence += 1;
@@ -383,7 +402,8 @@ function createRuntime(fixtures, options = {}) {
         feedbackId: feedbackEntry.feedbackId,
         feedbackStatus: status,
         topReason: feedbackEntry.topReason,
-        recommendedActionType: feedbackEntry.recommendedActionType
+        recommendedActionType: feedbackEntry.recommendedActionType,
+        operatorReasonCode: feedbackEntry.operatorReasonCode
       }
     );
 
@@ -506,9 +526,9 @@ function createRuntime(fixtures, options = {}) {
     const trustScore = totalEntries === 0 ? 50 : Math.round((usefulCount / totalEntries) * 100);
     const lastFeedbackAt = history.length ? history[history.length - 1].occurredAt : null;
 
-    function groupBy(key, outputKey) {
+    function groupBy(key, outputKey, sourceEntries = history) {
       return Object.values(
-        history.reduce((accumulator, entry) => {
+        sourceEntries.reduce((accumulator, entry) => {
           const groupValue = entry[key] || "UNKNOWN";
           if (!accumulator[groupValue]) {
             accumulator[groupValue] = {
@@ -546,12 +566,65 @@ function createRuntime(fixtures, options = {}) {
         dismissedCount,
         trustScore,
         uniqueDeals: new Set(history.map((entry) => entry.dealId)).size,
+        notesCount: history.filter((entry) => entry.operatorNote).length,
+        dismissedWithReasonCount: history.filter((entry) => entry.status === "DISMISSED" && entry.operatorReasonCode).length,
         lastFeedbackAt
       },
       byReason: groupBy("topReason", "reasonCode"),
       byAction: groupBy("recommendedActionType", "actionType"),
       byOwner: groupBy("owner", "owner"),
+      byDismissReason: groupBy(
+        "operatorReasonCode",
+        "reasonCode",
+        history.filter((entry) => entry.status === "DISMISSED")
+      ).filter((item) => item.reasonCode !== "UNKNOWN"),
       recentEntries: history.slice(-10).reverse()
+    };
+  }
+
+  function exportFeedback(scenarioId, format) {
+    const report = getFeedbackReport(scenarioId);
+    const state = ensureScenarioState(scenarioId);
+    const entries = state.feedbackHistory.slice();
+
+    if (format === "csv") {
+      const header = [
+        "feedbackId",
+        "occurredAt",
+        "dealId",
+        "dealName",
+        "owner",
+        "status",
+        "operatorReasonCode",
+        "operatorNote",
+        "topReason",
+        "recommendedActionType",
+        "rescueScore",
+        "validationStatus"
+      ];
+      const lines = entries.map((entry) => [
+        entry.feedbackId,
+        entry.occurredAt,
+        entry.dealId,
+        entry.dealName,
+        entry.owner,
+        entry.status,
+        entry.operatorReasonCode,
+        entry.operatorNote,
+        entry.topReason,
+        entry.recommendedActionType,
+        entry.rescueScore,
+        entry.validationStatus
+      ].map(escapeCsv).join(","));
+
+      return [header.join(","), ...lines].join("\n");
+    }
+
+    return {
+      scenarioId,
+      exportedAt: new Date().toISOString(),
+      metrics: report.metrics,
+      entries
     };
   }
 
@@ -580,6 +653,7 @@ function createRuntime(fixtures, options = {}) {
     getAnalysis,
     getManagerReport,
     getFeedbackReport,
+    exportFeedback,
     analyzeDeal,
     createTask,
     generateDraft,

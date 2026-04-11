@@ -70,6 +70,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/deals/DL-1001/draft?scenario=critical-stalled`
 - `/api/events?scenario=critical-stalled`
 - `/api/feedback/report?scenario=critical-stalled`
+- `/api/feedback/export?scenario=critical-stalled&format=json`
+- `/api/feedback/export?scenario=critical-stalled&format=csv`
 
 ## Interactive demo behavior
 
@@ -79,6 +81,8 @@ The UI now supports:
 - task creation with idempotent local state
 - draft generation checks
 - operator feedback capture (`useful` / `dismiss`)
+- structured operator dismissal reason
+- free-text operator note
 - calibrated recommendation trust based on operator signal
 - recent feedback history per deal
 - queue-to-focus navigation
@@ -112,3 +116,10 @@ Feedback endpoints:
 - `POST /api/deals/DL-1001/feedback/useful?scenario=critical-stalled`
 - `POST /api/deals/DL-1001/feedback/dismiss?scenario=critical-stalled`
 - `GET /api/feedback/report?scenario=critical-stalled`
+- `GET /api/feedback/export?scenario=critical-stalled&format=json`
+- `GET /api/feedback/export?scenario=critical-stalled&format=csv`
+
+Feedback POST bodies can now include:
+
+- `reasonCode`
+- `note`

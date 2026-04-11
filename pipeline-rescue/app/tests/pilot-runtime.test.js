@@ -89,12 +89,17 @@ test("resetScenario clears persisted local runtime state for that scenario", () 
 
 test("recordFeedback persists recommendation feedback and decorates overview", () => {
   const runtime = createTestRuntime();
-  const payload = runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+  const payload = runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {
+    reasonCode: "ACCURATE_PRIORITY",
+    note: "Matched the field urgency."
+  });
   const overview = runtime.getOverview("critical-stalled");
 
   assert.equal(payload.feedbackState.status, "USEFUL");
   assert.equal(payload.feedbackState.dealHistoryCount, 1);
   assert.equal(payload.feedbackState.operatorTrustScore, 100);
+  assert.equal(payload.feedbackState.reasonCode, "ACCURATE_PRIORITY");
+  assert.equal(payload.feedbackState.note, "Matched the field urgency.");
   assert.ok(payload.feedbackState.calibratedRecommendationScore >= payload.feedbackState.baseRecommendationScore);
   assert.equal(payload.analysis.feedbackState.status, "USEFUL");
   assert.equal(overview.focusedDeal.feedbackState.status, "USEFUL");
@@ -126,9 +131,17 @@ test("manager report summarizes coverage, reasons, and owner breakdown", () => {
 
 test("feedback report groups signals by reason and action", () => {
   const runtime = createTestRuntime();
-  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
-  runtime.recordFeedback("critical-stalled", "DL-1002", "DISMISSED");
-  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {
+    reasonCode: "ACCURATE_PRIORITY",
+    note: "Matched reality."
+  });
+  runtime.recordFeedback("critical-stalled", "DL-1002", "DISMISSED", {
+    reasonCode: "WRONG_ACTION",
+    note: "Too aggressive for this account."
+  });
+  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {
+    reasonCode: "CLEAR_ACTION"
+  });
 
   const report = runtime.getFeedbackReport("critical-stalled");
 
@@ -136,7 +149,26 @@ test("feedback report groups signals by reason and action", () => {
   assert.equal(report.metrics.usefulCount, 2);
   assert.equal(report.metrics.dismissedCount, 1);
   assert.equal(report.metrics.trustScore, 67);
+  assert.equal(report.metrics.notesCount, 2);
+  assert.equal(report.byDismissReason[0].reasonCode, "WRONG_ACTION");
   assert.equal(report.recentEntries[0].dealId, "DL-1001");
   assert.ok(report.byReason[0].sampleSize >= 1);
   assert.ok(report.byAction[0].sampleSize >= 1);
+});
+
+test("feedback export returns json and csv payloads", () => {
+  const runtime = createTestRuntime();
+  runtime.recordFeedback("critical-stalled", "DL-1003", "DISMISSED", {
+    reasonCode: "WEAK_EVIDENCE",
+    note: "The proof was too thin."
+  });
+
+  const jsonPayload = runtime.exportFeedback("critical-stalled", "json");
+  const csvPayload = runtime.exportFeedback("critical-stalled", "csv");
+
+  assert.equal(jsonPayload.metrics.totalEntries, 1);
+  assert.equal(jsonPayload.entries[0].operatorReasonCode, "WEAK_EVIDENCE");
+  assert.match(csvPayload, /feedbackId,occurredAt,dealId/);
+  assert.match(csvPayload, /WEAK_EVIDENCE/);
+  assert.match(csvPayload, /The proof was too thin\./);
 });

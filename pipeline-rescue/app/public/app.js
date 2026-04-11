@@ -35,9 +35,11 @@ async function loadDealAnalysis(dealId) {
   return fetchJson(buildScenarioUrl(`/api/deals/${encodeURIComponent(dealId)}/analysis`));
 }
 
-async function postAction(path) {
+async function postAction(path, body) {
   return fetchJson(buildScenarioUrl(path), {
-    method: "POST"
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined
   });
 }
 
@@ -55,6 +57,25 @@ async function loadFeedbackReport() {
 
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
+}
+
+async function downloadFeedbackExport(format) {
+  const response = await fetch(buildScenarioUrl(`/api/feedback/export?format=${encodeURIComponent(format)}`));
+  if (!response.ok) {
+    throw new Error(`Export failed: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const extension = format === "csv" ? "csv" : "json";
+
+  link.href = url;
+  link.download = `pipeline-rescue-feedback-${appState.scenarioId}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 function formatCurrency(value) {
@@ -162,6 +183,8 @@ function renderFeedbackState(feedbackState) {
         <span class="verification-value">${feedbackState?.calibrationDirection || "NEUTRAL"} ${feedbackState?.calibrationAdjustment ? `(${feedbackState.calibrationAdjustment > 0 ? "+" : ""}${feedbackState.calibrationAdjustment})` : ""}</span>
       </article>
     </div>
+    <p class="verification-note">${feedbackState?.reasonCode ? `Latest operator reason: ${feedbackState.reasonCode}.` : "No structured operator reason recorded yet."}</p>
+    <p class="verification-note">${feedbackState?.note ? `Latest note: ${feedbackState.note}` : "No free-text note recorded yet."}</p>
   `;
 
   const recentSignals = feedbackState?.recentSignals || [];
@@ -169,7 +192,7 @@ function renderFeedbackState(feedbackState) {
     <p class="score-label">Recent deal feedback</p>
     ${recentSignals.length
       ? `<ul class="verification-list">${recentSignals
-        .map((entry) => `<li>${entry.status} | ${new Date(entry.occurredAt).toLocaleString("en-GB")} | ${entry.topReason}</li>`)
+        .map((entry) => `<li>${entry.status} | ${new Date(entry.occurredAt).toLocaleString("en-GB")} | ${entry.topReason}${entry.operatorReasonCode ? ` | ${entry.operatorReasonCode}` : ""}${entry.operatorNote ? ` | ${entry.operatorNote}` : ""}</li>`)
         .join("")}</ul>`
       : `<p class="verification-note">No feedback history for this deal yet.</p>`}
   `;
@@ -327,6 +350,7 @@ function renderFeedbackReport(report) {
   const metrics = report.metrics || {};
   const byReason = report.byReason || [];
   const byAction = report.byAction || [];
+  const byDismissReason = report.byDismissReason || [];
   const recentEntries = report.recentEntries || [];
 
   document.getElementById("feedback-report").innerHTML = `
@@ -342,6 +366,14 @@ function renderFeedbackReport(report) {
       <article class="manager-metric">
         <span class="score-label">Unique deals</span>
         <span class="verification-value">${metrics.uniqueDeals ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Notes logged</span>
+        <span class="verification-value">${metrics.notesCount ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Dismiss reasons</span>
+        <span class="verification-value">${metrics.dismissedWithReasonCount ?? 0}</span>
       </article>
     </div>
     <div class="manager-columns">
@@ -359,9 +391,15 @@ function renderFeedbackReport(report) {
       </div>
     </div>
     <div class="verification-block">
+      <p class="score-label">Dismiss reasons</p>
+      <ul class="verification-list">
+        ${byDismissReason.slice(0, 5).map((item) => `<li>${item.reasonCode}: ${item.dismissedCount} dismissed, trust ${item.trustScore}/100</li>`).join("") || "<li>No dismissal reason captured yet.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
       <p class="score-label">Recent signals</p>
       <ul class="verification-list">
-        ${recentEntries.slice(0, 5).map((item) => `<li>${item.dealName} | ${item.status} | ${item.topReason} | ${new Date(item.occurredAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No feedback signal captured yet.</li>"}
+        ${recentEntries.slice(0, 5).map((item) => `<li>${item.dealName} | ${item.status} | ${item.topReason}${item.operatorReasonCode ? ` | ${item.operatorReasonCode}` : ""}${item.operatorNote ? ` | ${item.operatorNote}` : ""} | ${new Date(item.occurredAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No feedback signal captured yet.</li>"}
       </ul>
     </div>
   `;
@@ -444,6 +482,21 @@ async function refreshFeedbackReport() {
   renderFeedbackReport(await loadFeedbackReport());
 }
 
+function getFeedbackPayload() {
+  const reasonCode = document.getElementById("feedback-reason-select").value || null;
+  const note = document.getElementById("feedback-note-input").value.trim() || null;
+
+  return {
+    reasonCode,
+    note
+  };
+}
+
+function clearFeedbackInputs() {
+  document.getElementById("feedback-reason-select").value = "";
+  document.getElementById("feedback-note-input").value = "";
+}
+
 function applyOverview(catalog, scenarioId, overview) {
   appState.catalog = catalog;
   appState.scenarioId = scenarioId;
@@ -495,8 +548,12 @@ async function handleDraftClick() {
 }
 
 async function handleFeedbackUsefulClick() {
-  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/useful`);
+  const payload = await postAction(
+    `/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/useful`,
+    getFeedbackPayload()
+  );
   renderFocusedDeal(payload.analysis);
+  clearFeedbackInputs();
   await refreshScenarioSummary();
   await refreshEvents();
   await refreshManagerReport();
@@ -504,12 +561,20 @@ async function handleFeedbackUsefulClick() {
 }
 
 async function handleFeedbackDismissClick() {
-  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/dismiss`);
+  const payload = await postAction(
+    `/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/dismiss`,
+    getFeedbackPayload()
+  );
   renderFocusedDeal(payload.analysis);
+  clearFeedbackInputs();
   await refreshScenarioSummary();
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+}
+
+async function handleFeedbackExportClick(format) {
+  await downloadFeedbackExport(format);
 }
 
 async function refreshScenarioSummary() {
@@ -531,6 +596,8 @@ async function main() {
   const refreshButton = document.getElementById("refresh-button");
   const resetButton = document.getElementById("reset-button");
   const queueList = document.getElementById("queue-list");
+  const exportJsonButton = document.getElementById("export-feedback-json-button");
+  const exportCsvButton = document.getElementById("export-feedback-csv-button");
 
   try {
     const catalog = await loadScenarios();
@@ -551,6 +618,12 @@ async function main() {
     document.getElementById("draft-button").addEventListener("click", handleDraftClick);
     document.getElementById("feedback-useful-button").addEventListener("click", handleFeedbackUsefulClick);
     document.getElementById("feedback-dismiss-button").addEventListener("click", handleFeedbackDismissClick);
+    exportJsonButton.addEventListener("click", async () => {
+      await handleFeedbackExportClick("json");
+    });
+    exportCsvButton.addEventListener("click", async () => {
+      await handleFeedbackExportClick("csv");
+    });
 
     queueList.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-deal-id]");
