@@ -315,6 +315,16 @@ h1 {
   gap: 10px;
 }
 
+.feedback-calibration,
+.feedback-history,
+.feedback-report {
+  margin-top: 14px;
+}
+
+.compact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .stack {
   display: grid;
   gap: 12px;
@@ -500,7 +510,8 @@ h1 {
   }
 
   .manager-metrics,
-  .manager-columns {
+  .manager-columns,
+  .compact-grid {
     grid-template-columns: 1fr;
   }
 

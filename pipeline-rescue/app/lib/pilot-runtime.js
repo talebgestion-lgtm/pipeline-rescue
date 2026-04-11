@@ -10,11 +10,16 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function toSerializableState(state) {
   return {
     sequence: state.sequence,
     taskStates: Object.fromEntries(state.taskStates),
     feedbackStates: Object.fromEntries(state.feedbackStates),
+    feedbackHistory: state.feedbackHistory,
     events: state.events
   };
 }
@@ -24,6 +29,7 @@ function fromSerializableState(state) {
     sequence: state.sequence || 1,
     taskStates: new Map(Object.entries(state.taskStates || {})),
     feedbackStates: new Map(Object.entries(state.feedbackStates || {})),
+    feedbackHistory: Array.isArray(state.feedbackHistory) ? state.feedbackHistory : [],
     events: Array.isArray(state.events) ? state.events : []
   };
 }
@@ -68,6 +74,7 @@ function createRuntime(fixtures, options = {}) {
         sequence: 1,
         taskStates: new Map(),
         feedbackStates: new Map(),
+        feedbackHistory: [],
         events: []
       });
     }
@@ -114,10 +121,88 @@ function createRuntime(fixtures, options = {}) {
     };
   }
 
+  function getFeedbackHistoryForDeal(scenarioId, dealId) {
+    const state = ensureScenarioState(scenarioId);
+    return state.feedbackHistory.filter((entry) => entry.dealId === dealId);
+  }
+
+  function getMatchingFeedbackHistory(analysis, feedbackHistory) {
+    const topReason = analysis.reasons && analysis.reasons[0] ? analysis.reasons[0].code : null;
+    const recommendedActionType = analysis.recommendedAction && analysis.recommendedAction.type
+      ? analysis.recommendedAction.type
+      : null;
+
+    return feedbackHistory.filter((entry) => {
+      if (topReason && entry.topReason === topReason) {
+        return true;
+      }
+
+      if (recommendedActionType && entry.recommendedActionType === recommendedActionType) {
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  function summarizeFeedbackHistory(feedbackHistory, stabilityScore) {
+    const usefulCount = feedbackHistory.filter((entry) => entry.status === "USEFUL").length;
+    const dismissedCount = feedbackHistory.filter((entry) => entry.status === "DISMISSED").length;
+    const sampleSize = usefulCount + dismissedCount;
+    const operatorTrustScore = sampleSize === 0 ? 50 : Math.round((usefulCount / sampleSize) * 100);
+    const baseRecommendationScore = typeof stabilityScore === "number"
+      ? Math.round(clamp(stabilityScore * 10, 0, 100))
+      : 50;
+    const calibratedRecommendationScore = sampleSize === 0
+      ? baseRecommendationScore
+      : Math.round((baseRecommendationScore * 0.7) + (operatorTrustScore * 0.3));
+    const calibrationAdjustment = calibratedRecommendationScore - baseRecommendationScore;
+    const calibrationDirection = calibrationAdjustment > 2
+      ? "POSITIVE"
+      : calibrationAdjustment < -2
+        ? "NEGATIVE"
+        : "NEUTRAL";
+
+    return {
+      usefulCount,
+      dismissedCount,
+      sampleSize,
+      operatorTrustScore,
+      baseRecommendationScore,
+      calibratedRecommendationScore,
+      calibrationAdjustment,
+      calibrationDirection
+    };
+  }
+
+  function buildFeedbackState(scenarioId, analysis, verification) {
+    const state = ensureScenarioState(scenarioId);
+    const baseState = getFeedbackStateForDeal(scenarioId, analysis.dealId);
+    const dealHistory = getFeedbackHistoryForDeal(scenarioId, analysis.dealId);
+    const matchedHistory = getMatchingFeedbackHistory(analysis, state.feedbackHistory);
+    const calibration = summarizeFeedbackHistory(matchedHistory, verification && verification.stabilityScore);
+
+    return {
+      ...baseState,
+      dealHistoryCount: dealHistory.length,
+      dealUsefulCount: dealHistory.filter((entry) => entry.status === "USEFUL").length,
+      dealDismissedCount: dealHistory.filter((entry) => entry.status === "DISMISSED").length,
+      matchedSignalCount: calibration.sampleSize,
+      matchedUsefulCount: calibration.usefulCount,
+      matchedDismissedCount: calibration.dismissedCount,
+      operatorTrustScore: calibration.operatorTrustScore,
+      baseRecommendationScore: calibration.baseRecommendationScore,
+      calibratedRecommendationScore: calibration.calibratedRecommendationScore,
+      calibrationAdjustment: calibration.calibrationAdjustment,
+      calibrationDirection: calibration.calibrationDirection,
+      recentSignals: dealHistory.slice(-3).reverse()
+    };
+  }
+
   function decorateAnalysis(scenarioId, analysisPayload) {
     const payload = deepClone(analysisPayload);
     payload.analysis.taskState = getTaskStateForDeal(scenarioId, payload.analysis.dealId);
-    payload.analysis.feedbackState = getFeedbackStateForDeal(scenarioId, payload.analysis.dealId);
+    payload.analysis.feedbackState = buildFeedbackState(scenarioId, payload.analysis, payload.verification);
     return payload;
   }
 
@@ -126,11 +211,12 @@ function createRuntime(fixtures, options = {}) {
     const state = ensureScenarioState(scenarioId);
 
     payload.focusedDeal.taskState = getTaskStateForDeal(scenarioId, payload.focusedDeal.dealId);
-    payload.focusedDeal.feedbackState = getFeedbackStateForDeal(scenarioId, payload.focusedDeal.dealId);
+    payload.focusedDeal.feedbackState = buildFeedbackState(scenarioId, payload.focusedDeal, payload.verification);
     payload.queue = payload.queue.map((item) => ({
       ...item,
       taskStatus: getTaskStateForDeal(scenarioId, item.dealId).status,
-      feedbackStatus: getFeedbackStateForDeal(scenarioId, item.dealId).status
+      feedbackStatus: getFeedbackStateForDeal(scenarioId, item.dealId).status,
+      feedbackSignalCount: getFeedbackHistoryForDeal(scenarioId, item.dealId).length
     }));
     payload.pilotEvents = state.events.slice(-8).reverse();
 
@@ -267,17 +353,42 @@ function createRuntime(fixtures, options = {}) {
       status,
       updatedAt: new Date().toISOString()
     };
+    const feedbackEntry = {
+      feedbackId: `fb_${String(state.sequence).padStart(4, "0")}`,
+      dealId,
+      dealName: analysis.analysis.dealName,
+      owner: analysis.analysis.owner,
+      status,
+      occurredAt: feedbackState.updatedAt,
+      topReason: analysis.analysis.reasons[0] ? analysis.analysis.reasons[0].code : "NO_REASON",
+      recommendedActionType: analysis.analysis.recommendedAction
+        ? analysis.analysis.recommendedAction.type
+        : "UNKNOWN",
+      rescueScore: analysis.analysis.rescueScore,
+      validationStatus: analysis.verification.validationStatus
+    };
 
+    state.sequence += 1;
     state.feedbackStates.set(dealId, feedbackState);
+    state.feedbackHistory.push(feedbackEntry);
+    if (state.feedbackHistory.length > 200) {
+      state.feedbackHistory.shift();
+    }
     persistState();
     createEvent(
       scenarioId,
       status === "USEFUL" ? "recommendation_marked_useful" : "recommendation_dismissed",
-      { dealId, feedbackStatus: status }
+      {
+        dealId,
+        feedbackId: feedbackEntry.feedbackId,
+        feedbackStatus: status,
+        topReason: feedbackEntry.topReason,
+        recommendedActionType: feedbackEntry.recommendedActionType
+      }
     );
 
     return {
-      feedbackState,
+      feedbackState: buildFeedbackState(scenarioId, analysis.analysis, analysis.verification),
       analysis: decorateAnalysis(scenarioId, analysis).analysis
     };
   }
@@ -299,6 +410,7 @@ function createRuntime(fixtures, options = {}) {
     }
 
     const state = ensureScenarioState(scenarioId);
+    const feedbackReport = getFeedbackReport(scenarioId);
     const events = state.events.slice();
     const touchedDealIds = new Set(
       events
@@ -359,8 +471,9 @@ function createRuntime(fixtures, options = {}) {
       analysesRun: events.filter((event) => event.eventName === "deal_analysis_completed").length,
       draftsGenerated: events.filter((event) => event.eventName === "draft_generated").length,
       draftsBlocked: events.filter((event) => event.eventName === "draft_blocked").length,
-      usefulFeedbackCount: events.filter((event) => event.eventName === "recommendation_marked_useful").length,
-      dismissedFeedbackCount: events.filter((event) => event.eventName === "recommendation_dismissed").length,
+      usefulFeedbackCount: feedbackReport.metrics.usefulCount,
+      dismissedFeedbackCount: feedbackReport.metrics.dismissedCount,
+      recommendationTrustScore: feedbackReport.metrics.trustScore,
       touchedDeals: touchedDealIds.size,
       queueCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithTask.length / atRiskQueue.length) * 100),
       feedbackCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithFeedback.length / atRiskQueue.length) * 100),
@@ -371,7 +484,8 @@ function createRuntime(fixtures, options = {}) {
       `${metrics.atRiskDeals} at-risk deals detected, including ${metrics.criticalDeals} critical.`,
       `${metrics.tasksCreated} local follow-up task(s) created with ${metrics.queueCoverageRate}% coverage on at-risk queue items.`,
       `${metrics.draftsGenerated} draft(s) generated and ${metrics.draftsBlocked} blocked by guardrails.`,
-      `${metrics.usefulFeedbackCount} useful and ${metrics.dismissedFeedbackCount} dismissed recommendation signal(s), covering ${metrics.feedbackCoverageRate}% of at-risk deals.`
+      `${metrics.usefulFeedbackCount} useful and ${metrics.dismissedFeedbackCount} dismissed recommendation signal(s), covering ${metrics.feedbackCoverageRate}% of at-risk deals.`,
+      `Operator trust score is ${metrics.recommendationTrustScore}/100 on the current feedback sample.`
     ];
 
     return {
@@ -380,6 +494,64 @@ function createRuntime(fixtures, options = {}) {
       topReasons,
       ownerBreakdown,
       digest
+    };
+  }
+
+  function getFeedbackReport(scenarioId) {
+    const state = ensureScenarioState(scenarioId);
+    const history = state.feedbackHistory.slice();
+    const usefulCount = history.filter((entry) => entry.status === "USEFUL").length;
+    const dismissedCount = history.filter((entry) => entry.status === "DISMISSED").length;
+    const totalEntries = usefulCount + dismissedCount;
+    const trustScore = totalEntries === 0 ? 50 : Math.round((usefulCount / totalEntries) * 100);
+    const lastFeedbackAt = history.length ? history[history.length - 1].occurredAt : null;
+
+    function groupBy(key, outputKey) {
+      return Object.values(
+        history.reduce((accumulator, entry) => {
+          const groupValue = entry[key] || "UNKNOWN";
+          if (!accumulator[groupValue]) {
+            accumulator[groupValue] = {
+              [outputKey]: groupValue,
+              usefulCount: 0,
+              dismissedCount: 0,
+              trustScore: 50,
+              sampleSize: 0
+            };
+          }
+
+          if (entry.status === "USEFUL") {
+            accumulator[groupValue].usefulCount += 1;
+          }
+
+          if (entry.status === "DISMISSED") {
+            accumulator[groupValue].dismissedCount += 1;
+          }
+
+          accumulator[groupValue].sampleSize += 1;
+          accumulator[groupValue].trustScore = Math.round(
+            (accumulator[groupValue].usefulCount / accumulator[groupValue].sampleSize) * 100
+          );
+
+          return accumulator;
+        }, {})
+      ).sort((left, right) => right.sampleSize - left.sampleSize || right.trustScore - left.trustScore);
+    }
+
+    return {
+      scenarioId,
+      metrics: {
+        totalEntries,
+        usefulCount,
+        dismissedCount,
+        trustScore,
+        uniqueDeals: new Set(history.map((entry) => entry.dealId)).size,
+        lastFeedbackAt
+      },
+      byReason: groupBy("topReason", "reasonCode"),
+      byAction: groupBy("recommendedActionType", "actionType"),
+      byOwner: groupBy("owner", "owner"),
+      recentEntries: history.slice(-10).reverse()
     };
   }
 
@@ -407,6 +579,7 @@ function createRuntime(fixtures, options = {}) {
     getOverview,
     getAnalysis,
     getManagerReport,
+    getFeedbackReport,
     analyzeDeal,
     createTask,
     generateDraft,

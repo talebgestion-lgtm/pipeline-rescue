@@ -93,9 +93,13 @@ test("recordFeedback persists recommendation feedback and decorates overview", (
   const overview = runtime.getOverview("critical-stalled");
 
   assert.equal(payload.feedbackState.status, "USEFUL");
+  assert.equal(payload.feedbackState.dealHistoryCount, 1);
+  assert.equal(payload.feedbackState.operatorTrustScore, 100);
+  assert.ok(payload.feedbackState.calibratedRecommendationScore >= payload.feedbackState.baseRecommendationScore);
   assert.equal(payload.analysis.feedbackState.status, "USEFUL");
   assert.equal(overview.focusedDeal.feedbackState.status, "USEFUL");
   assert.equal(overview.queue[0].feedbackStatus, "USEFUL");
+  assert.equal(overview.queue[0].feedbackSignalCount, 1);
 });
 
 test("manager report summarizes coverage, reasons, and owner breakdown", () => {
@@ -113,8 +117,26 @@ test("manager report summarizes coverage, reasons, and owner breakdown", () => {
   assert.equal(report.metrics.draftsGenerated, 1);
   assert.equal(report.metrics.usefulFeedbackCount, 1);
   assert.equal(report.metrics.dismissedFeedbackCount, 1);
+  assert.ok(typeof report.metrics.recommendationTrustScore === "number");
   assert.ok(report.metrics.feedbackCoverageRate > 0);
   assert.ok(report.metrics.queueCoverageRate > 0);
   assert.equal(report.topReasons[0].reasonCode, "ACTIVITY_STALE");
   assert.equal(report.ownerBreakdown[0].owner, "Sarah Lane");
+});
+
+test("feedback report groups signals by reason and action", () => {
+  const runtime = createTestRuntime();
+  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+  runtime.recordFeedback("critical-stalled", "DL-1002", "DISMISSED");
+  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+
+  const report = runtime.getFeedbackReport("critical-stalled");
+
+  assert.equal(report.metrics.totalEntries, 3);
+  assert.equal(report.metrics.usefulCount, 2);
+  assert.equal(report.metrics.dismissedCount, 1);
+  assert.equal(report.metrics.trustScore, 67);
+  assert.equal(report.recentEntries[0].dealId, "DL-1001");
+  assert.ok(report.byReason[0].sampleSize >= 1);
+  assert.ok(report.byAction[0].sampleSize >= 1);
 });

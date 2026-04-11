@@ -69,6 +69,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/deals/DL-1001/tasks?scenario=critical-stalled`
 - `POST /api/deals/DL-1001/draft?scenario=critical-stalled`
 - `/api/events?scenario=critical-stalled`
+- `/api/feedback/report?scenario=critical-stalled`
 
 ## Interactive demo behavior
 
@@ -78,6 +79,8 @@ The UI now supports:
 - task creation with idempotent local state
 - draft generation checks
 - operator feedback capture (`useful` / `dismiss`)
+- calibrated recommendation trust based on operator signal
+- recent feedback history per deal
 - queue-to-focus navigation
 - recent pilot event log
 - scenario reset
@@ -92,6 +95,7 @@ The pilot runtime now persists local state in:
 This file stores:
 
 - created task state
+- feedback status and feedback history
 - recent pilot events
 
 It is safe for demo use and can be reset from the UI or via:
@@ -107,3 +111,4 @@ Feedback endpoints:
 
 - `POST /api/deals/DL-1001/feedback/useful?scenario=critical-stalled`
 - `POST /api/deals/DL-1001/feedback/dismiss?scenario=critical-stalled`
+- `GET /api/feedback/report?scenario=critical-stalled`

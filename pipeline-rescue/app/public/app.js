@@ -49,6 +49,10 @@ async function loadManagerReport() {
   return fetchJson(buildScenarioUrl("/api/manager/report"));
 }
 
+async function loadFeedbackReport() {
+  return fetchJson(buildScenarioUrl("/api/feedback/report"));
+}
+
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
@@ -130,13 +134,45 @@ function renderTaskState(taskState) {
 
 function renderFeedbackState(feedbackState) {
   const value = document.getElementById("feedback-state-value");
+  const calibration = document.getElementById("feedback-calibration");
+  const history = document.getElementById("feedback-history");
 
   if (!feedbackState || feedbackState.status === "NO_FEEDBACK") {
     value.textContent = "No feedback yet";
-    return;
+  } else {
+    value.textContent = `${feedbackState.status} | ${new Date(feedbackState.updatedAt).toLocaleString("en-GB")}`;
   }
 
-  value.textContent = `${feedbackState.status} | ${new Date(feedbackState.updatedAt).toLocaleString("en-GB")}`;
+  calibration.innerHTML = `
+    <div class="verification-grid compact-grid">
+      <article class="verification-metric">
+        <span class="score-label">Deal signals</span>
+        <span class="verification-value">${feedbackState?.dealHistoryCount ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Matched trust</span>
+        <span class="verification-value">${feedbackState?.operatorTrustScore ?? 50}/100</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Calibrated score</span>
+        <span class="verification-value">${feedbackState?.calibratedRecommendationScore ?? feedbackState?.baseRecommendationScore ?? 50}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Calibration</span>
+        <span class="verification-value">${feedbackState?.calibrationDirection || "NEUTRAL"} ${feedbackState?.calibrationAdjustment ? `(${feedbackState.calibrationAdjustment > 0 ? "+" : ""}${feedbackState.calibrationAdjustment})` : ""}</span>
+      </article>
+    </div>
+  `;
+
+  const recentSignals = feedbackState?.recentSignals || [];
+  history.innerHTML = `
+    <p class="score-label">Recent deal feedback</p>
+    ${recentSignals.length
+      ? `<ul class="verification-list">${recentSignals
+        .map((entry) => `<li>${entry.status} | ${new Date(entry.occurredAt).toLocaleString("en-GB")} | ${entry.topReason}</li>`)
+        .join("")}</ul>`
+      : `<p class="verification-note">No feedback history for this deal yet.</p>`}
+  `;
 }
 
 function renderFocusedDeal(deal) {
@@ -259,6 +295,10 @@ function renderManagerReport(report) {
         <span class="score-label">Dismissed feedback</span>
         <span class="verification-value">${metrics.dismissedFeedbackCount ?? 0}</span>
       </article>
+      <article class="manager-metric">
+        <span class="score-label">Operator trust</span>
+        <span class="verification-value">${metrics.recommendationTrustScore ?? 50}/100</span>
+      </article>
     </div>
     <div class="verification-block">
       <p class="score-label">Digest</p>
@@ -279,6 +319,50 @@ function renderManagerReport(report) {
           ${ownerBreakdown.map((item) => `<li>${item.owner}: ${item.atRiskDeals} at-risk, ${item.taskedDeals} tasked, ${item.usefulFeedback} useful, ${item.dismissedFeedback} dismissed</li>`).join("") || "<li>No owner activity yet.</li>"}
         </ul>
       </div>
+    </div>
+  `;
+}
+
+function renderFeedbackReport(report) {
+  const metrics = report.metrics || {};
+  const byReason = report.byReason || [];
+  const byAction = report.byAction || [];
+  const recentEntries = report.recentEntries || [];
+
+  document.getElementById("feedback-report").innerHTML = `
+    <div class="manager-metrics">
+      <article class="manager-metric">
+        <span class="score-label">Trust score</span>
+        <span class="verification-value">${metrics.trustScore ?? 50}/100</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Total signals</span>
+        <span class="verification-value">${metrics.totalEntries ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Unique deals</span>
+        <span class="verification-value">${metrics.uniqueDeals ?? 0}</span>
+      </article>
+    </div>
+    <div class="manager-columns">
+      <div class="verification-block">
+        <p class="score-label">Reason calibration</p>
+        <ul class="verification-list">
+          ${byReason.slice(0, 4).map((item) => `<li>${item.reasonCode}: ${item.usefulCount} useful, ${item.dismissedCount} dismissed, trust ${item.trustScore}/100</li>`).join("") || "<li>No feedback yet.</li>"}
+        </ul>
+      </div>
+      <div class="verification-block">
+        <p class="score-label">Action calibration</p>
+        <ul class="verification-list">
+          ${byAction.slice(0, 4).map((item) => `<li>${item.actionType}: ${item.usefulCount} useful, ${item.dismissedCount} dismissed, trust ${item.trustScore}/100</li>`).join("") || "<li>No feedback yet.</li>"}
+        </ul>
+      </div>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Recent signals</p>
+      <ul class="verification-list">
+        ${recentEntries.slice(0, 5).map((item) => `<li>${item.dealName} | ${item.status} | ${item.topReason} | ${new Date(item.occurredAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No feedback signal captured yet.</li>"}
+      </ul>
     </div>
   `;
 }
@@ -327,7 +411,7 @@ function renderQueue(queue) {
         <p class="queue-meta">${item.owner} | ${item.riskLevel} | score ${formatScore(item.rescueScore)}</p>
         <p class="queue-meta">Top reason: ${item.topReason}. Last activity ${item.lastActivityAgeDays ?? "unknown"} day(s) ago.</p>
         <p class="queue-meta">Task state: ${item.taskStatus || "NOT_CREATED"}</p>
-        <p class="queue-meta">Feedback: ${item.feedbackStatus || "NO_FEEDBACK"}</p>
+        <p class="queue-meta">Feedback: ${item.feedbackStatus || "NO_FEEDBACK"} | ${item.feedbackSignalCount ?? 0} signal(s)</p>
         <p class="queue-action">${item.nextBestAction}</p>
         <button type="button" class="queue-open-button" data-deal-id="${item.dealId}">Open deal</button>
       </article>
@@ -356,6 +440,10 @@ async function refreshManagerReport() {
   renderManagerReport(await loadManagerReport());
 }
 
+async function refreshFeedbackReport() {
+  renderFeedbackReport(await loadFeedbackReport());
+}
+
 function applyOverview(catalog, scenarioId, overview) {
   appState.catalog = catalog;
   appState.scenarioId = scenarioId;
@@ -376,6 +464,7 @@ async function renderScenario(catalog, scenarioId) {
   const overview = await loadOverview(scenarioId);
   applyOverview(catalog, scenarioId, overview);
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function handleAnalyzeClick() {
@@ -384,6 +473,7 @@ async function handleAnalyzeClick() {
   renderFocusedDeal(payload.analysis);
   await refreshEvents();
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function handleTaskClick() {
@@ -392,6 +482,7 @@ async function handleTaskClick() {
   await refreshScenarioSummary();
   await refreshEvents();
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function handleDraftClick() {
@@ -400,6 +491,7 @@ async function handleDraftClick() {
   renderFocusedDeal(payload.analysis);
   await refreshEvents();
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function handleFeedbackUsefulClick() {
@@ -408,6 +500,7 @@ async function handleFeedbackUsefulClick() {
   await refreshScenarioSummary();
   await refreshEvents();
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function handleFeedbackDismissClick() {
@@ -416,6 +509,7 @@ async function handleFeedbackDismissClick() {
   await refreshScenarioSummary();
   await refreshEvents();
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function refreshScenarioSummary() {
@@ -429,6 +523,7 @@ async function handleResetClick() {
   const payload = await resetScenarioState();
   applyOverview(appState.catalog, appState.scenarioId, payload.overview);
   await refreshManagerReport();
+  await refreshFeedbackReport();
 }
 
 async function main() {
