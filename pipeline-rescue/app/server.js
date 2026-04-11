@@ -22,6 +22,13 @@ function sendText(response, statusCode, contentType, payload) {
   response.end(payload);
 }
 
+function saveJsonAtomic(filePath, payload) {
+  const tempFilePath = `${filePath}.tmp`;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(tempFilePath, JSON.stringify(payload, null, 2));
+  fs.renameSync(tempFilePath, filePath);
+}
+
 function sendFile(response, filePath) {
   fs.readFile(filePath, (error, content) => {
     if (error) {
@@ -51,6 +58,22 @@ function readGdprConfig() {
 
 function readPackageManifest() {
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+}
+
+function validateComplianceConfigPayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    const error = new Error("Compliance config body must be a JSON object.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!Array.isArray(payload.processingActivities)) {
+    const error = new Error("Compliance config must define processingActivities.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return payload;
 }
 
 function readJsonBody(request) {
@@ -327,6 +350,39 @@ const server = http.createServer(async (request, response) => {
       }
 
       sendJson(response, 200, gdprState.complianceReport);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/compliance/config") {
+      if (gdprState.error) {
+        sendJson(response, 500, {
+          error: "GDPR configuration unavailable",
+          detail: gdprState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, gdprState.gdprConfig);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/compliance/config") {
+      const body = validateComplianceConfigPayload(await readJsonBody(request));
+      createComplianceReport(body);
+      saveJsonAtomic(gdprConfigPath, body);
+
+      const refreshedState = getGdprState();
+      sendJson(response, 200, {
+        config: refreshedState.gdprConfig,
+        complianceReport: refreshedState.complianceReport,
+        systemReport: createSystemReport({
+          packageManifest: appState.packageManifest,
+          fixtures: appState.fixtures,
+          gdprState: refreshedState,
+          runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
+          startupError: appState.startupError
+        })
+      });
       return;
     }
 

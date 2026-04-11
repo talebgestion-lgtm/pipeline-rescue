@@ -73,6 +73,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/feedback/export?scenario=critical-stalled&format=json`
 - `/api/feedback/export?scenario=critical-stalled&format=csv`
 - `/api/compliance/report`
+- `/api/compliance/config`
 - `/api/system/report`
 - `/health/live`
 - `/health/ready`
@@ -99,6 +100,7 @@ The UI now supports:
 - top friction patterns from dismissed field feedback
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
+- a local compliance-config editor for real legal inputs
 
 ## Local state persistence
 
@@ -143,6 +145,8 @@ Feedback reporting now also exposes:
 Compliance endpoint:
 
 - `GET /api/compliance/report`
+- `GET /api/compliance/config`
+- `POST /api/compliance/config`
 
 Operator notes are now intentionally constrained:
 

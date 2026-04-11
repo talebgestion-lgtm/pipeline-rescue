@@ -59,6 +59,10 @@ async function loadComplianceReport() {
   return fetchJson("/api/compliance/report");
 }
 
+async function loadComplianceConfig() {
+  return fetchJson("/api/compliance/config");
+}
+
 async function loadSystemReport() {
   return fetchJson("/api/system/report");
 }
@@ -84,6 +88,14 @@ async function downloadFeedbackExport(format) {
   link.click();
   link.remove();
   window.URL.revokeObjectURL(url);
+}
+
+async function saveComplianceConfig(config) {
+  return fetchJson("/api/compliance/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config)
+  });
 }
 
 function formatCurrency(value) {
@@ -503,6 +515,10 @@ function renderSystemReport(report) {
   `;
 }
 
+function renderComplianceConfig(config) {
+  document.getElementById("compliance-config-input").value = JSON.stringify(config, null, 2);
+}
+
 function renderEvents(eventsPayload) {
   const events = eventsPayload.events || [];
   const eventList = document.getElementById("event-list");
@@ -584,6 +600,10 @@ async function refreshComplianceReport() {
   renderComplianceReport(await loadComplianceReport());
 }
 
+async function refreshComplianceConfig() {
+  renderComplianceConfig(await loadComplianceConfig());
+}
+
 async function refreshSystemReport() {
   renderSystemReport(await loadSystemReport());
 }
@@ -625,6 +645,7 @@ async function renderScenario(catalog, scenarioId) {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -636,6 +657,7 @@ async function handleAnalyzeClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -647,6 +669,7 @@ async function handleTaskClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -658,6 +681,7 @@ async function handleDraftClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -673,6 +697,7 @@ async function handleFeedbackUsefulClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -688,6 +713,7 @@ async function handleFeedbackDismissClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
 }
 
@@ -708,7 +734,35 @@ async function handleResetClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshComplianceConfig();
   await refreshSystemReport();
+}
+
+async function handleReloadComplianceConfigClick() {
+  try {
+    await refreshComplianceConfig();
+    await refreshComplianceReport();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("compliance-report").innerHTML = `
+      <p class="verification-note">Compliance config reload failed: ${error.message}</p>
+    `;
+  }
+}
+
+async function handleSaveComplianceConfigClick() {
+  try {
+    const raw = document.getElementById("compliance-config-input").value;
+    const payload = JSON.parse(raw);
+    const response = await saveComplianceConfig(payload);
+    renderComplianceConfig(response.config);
+    renderComplianceReport(response.complianceReport);
+    renderSystemReport(response.systemReport);
+  } catch (error) {
+    document.getElementById("compliance-report").innerHTML = `
+      <p class="verification-note">Compliance config save failed: ${error.message}</p>
+    `;
+  }
 }
 
 async function main() {
@@ -718,6 +772,8 @@ async function main() {
   const queueList = document.getElementById("queue-list");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
+  const reloadComplianceConfigButton = document.getElementById("reload-compliance-config-button");
+  const saveComplianceConfigButton = document.getElementById("save-compliance-config-button");
 
   try {
     const catalog = await loadScenarios();
@@ -744,6 +800,8 @@ async function main() {
     exportCsvButton.addEventListener("click", async () => {
       await handleFeedbackExportClick("csv");
     });
+    reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
+    saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
 
     queueList.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-deal-id]");
