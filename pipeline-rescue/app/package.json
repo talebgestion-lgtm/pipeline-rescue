@@ -4,6 +4,7 @@
   "private": true,
   "description": "Deterministic executable starter for Pipeline Rescue",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test --test-isolation=none"
   }
 }

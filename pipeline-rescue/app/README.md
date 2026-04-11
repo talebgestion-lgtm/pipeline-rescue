@@ -21,6 +21,12 @@ Open:
 http://localhost:4179
 ```
 
+Run regression checks:
+
+```powershell
+npm test
+```
+
 ## Scope
 
 This starter does not connect to HubSpot yet.
