@@ -5,7 +5,9 @@ const appState = {
   focusedDealId: null,
   installPrompt: null,
   serviceWorkerReady: false,
-  installReady: false
+  installReady: false,
+  providerProbe: null,
+  liveDraft: null
 };
 
 function getSearchScenario() {
@@ -70,12 +72,24 @@ async function loadAiProviderStatus() {
   return fetchJson("/api/ai/provider-status");
 }
 
+async function probeProvider() {
+  return fetchJson("/api/ai/provider-probe", {
+    method: "POST"
+  });
+}
+
 async function loadAiControlCenter() {
   return fetchJson(buildScenarioUrl("/api/ai/control-center"));
 }
 
 async function runAiCycle() {
   return fetchJson(buildScenarioUrl("/api/ai/run-cycle"), {
+    method: "POST"
+  });
+}
+
+async function generateLiveDraftForDeal(dealId) {
+  return fetchJson(buildScenarioUrl(`/api/deals/${encodeURIComponent(dealId)}/live-draft`), {
     method: "POST"
   });
 }
@@ -311,12 +325,27 @@ function renderFocusedDeal(deal) {
   }
 
   const subject = document.getElementById("draft-subject");
+  const meta = document.getElementById("draft-meta");
   const body = document.getElementById("draft-body");
+
+  if (
+    appState.liveDraft
+    && appState.liveDraft.scenarioId === appState.scenarioId
+    && appState.liveDraft.dealId === deal.dealId
+  ) {
+    subject.textContent = appState.liveDraft.draft.subject || "Untitled live draft";
+    meta.textContent = `Live provider draft | ${appState.liveDraft.provider} | ${appState.liveDraft.model}`;
+    body.textContent = appState.liveDraft.draft.body || "Live draft body unavailable.";
+    return;
+  }
+
   if (deal.draft?.eligible) {
     subject.textContent = deal.draft.subject || "Untitled draft";
+    meta.textContent = "Deterministic local draft";
     body.textContent = deal.draft.body || "Draft body unavailable.";
   } else {
     subject.textContent = "Draft blocked";
+    meta.textContent = "Deterministic guardrail block";
     body.textContent = `Draft generation is blocked: ${deal.draft?.blockedReason || "UNKNOWN_REASON"}.`;
   }
 }
@@ -749,6 +778,10 @@ function renderAiProviderStatus(report) {
         ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
       </ul>
     </div>
+    <div class="verification-block">
+      <p class="score-label">Last probe</p>
+      <p class="verification-note">${appState.providerProbe ? `${appState.providerProbe.summary} | ${appState.providerProbe.provider} | ${appState.providerProbe.model}` : "No live provider probe has been run yet."}</p>
+    </div>
   `;
 }
 
@@ -1108,6 +1141,7 @@ async function renderScenario(catalog, scenarioId) {
   const overview = await loadOverview(scenarioId);
   applyOverview(catalog, scenarioId, overview);
   renderAiCycleReport(null);
+  appState.liveDraft = null;
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshAiControlCenter();
@@ -1119,6 +1153,7 @@ async function renderScenario(catalog, scenarioId) {
 }
 
 async function handleAnalyzeClick() {
+  appState.liveDraft = null;
   const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/analyze`);
   renderVerification(payload.verification);
   renderFocusedDeal(payload.analysis);
@@ -1133,6 +1168,7 @@ async function handleAnalyzeClick() {
 }
 
 async function handleTaskClick() {
+  appState.liveDraft = null;
   const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/tasks`);
   renderFocusedDeal(payload.analysis);
   await refreshScenarioSummary();
@@ -1147,6 +1183,7 @@ async function handleTaskClick() {
 }
 
 async function handleDraftClick() {
+  appState.liveDraft = null;
   const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/draft`);
   renderVerification(payload.verification);
   renderFocusedDeal(payload.analysis);
@@ -1255,6 +1292,33 @@ async function handleRunAiCycleClick() {
     document.getElementById("ai-cycle-report").innerHTML = `
       <p class="verification-note">AI cycle failed: ${error.message}</p>
     `;
+  }
+}
+
+async function handleProbeAiProviderClick() {
+  try {
+    appState.providerProbe = await probeProvider();
+    await refreshAiProvider();
+  } catch (error) {
+    document.getElementById("ai-provider-status").innerHTML = `
+      <p class="verification-note">AI provider probe failed: ${error.message}</p>
+    `;
+  }
+}
+
+async function handleLiveDraftClick() {
+  try {
+    const response = await generateLiveDraftForDeal(appState.focusedDealId);
+    appState.liveDraft = {
+      scenarioId: response.scenarioId,
+      dealId: response.dealId,
+      ...response.liveDraft
+    };
+    await renderFocusedDealById(appState.focusedDealId);
+    await refreshAiProvider();
+  } catch (error) {
+    document.getElementById("draft-meta").textContent = "Live provider draft failed";
+    document.getElementById("draft-body").textContent = error.message;
   }
 }
 
@@ -1368,6 +1432,8 @@ async function main() {
   const runAiCycleButton = document.getElementById("run-ai-cycle-button");
   const reloadAiProviderButton = document.getElementById("reload-ai-provider-button");
   const saveAiProviderButton = document.getElementById("save-ai-provider-button");
+  const probeAiProviderButton = document.getElementById("probe-ai-provider-button");
+  const liveDraftButton = document.getElementById("live-draft-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1407,6 +1473,7 @@ async function main() {
     document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
     document.getElementById("task-button").addEventListener("click", handleTaskClick);
     document.getElementById("draft-button").addEventListener("click", handleDraftClick);
+    liveDraftButton.addEventListener("click", handleLiveDraftClick);
     document.getElementById("feedback-useful-button").addEventListener("click", handleFeedbackUsefulClick);
     document.getElementById("feedback-dismiss-button").addEventListener("click", handleFeedbackDismissClick);
     exportJsonButton.addEventListener("click", async () => {
@@ -1418,6 +1485,7 @@ async function main() {
     runAiCycleButton.addEventListener("click", handleRunAiCycleClick);
     reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
     saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
+    probeAiProviderButton.addEventListener("click", handleProbeAiProviderClick);
     reloadAiProviderButton.addEventListener("click", handleReloadAiProviderClick);
     saveAiProviderButton.addEventListener("click", handleSaveAiProviderClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
@@ -1430,6 +1498,7 @@ async function main() {
         return;
       }
 
+      appState.liveDraft = null;
       await renderFocusedDealById(button.dataset.dealId);
     });
 

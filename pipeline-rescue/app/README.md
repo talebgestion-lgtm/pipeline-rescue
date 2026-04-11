@@ -90,6 +90,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/ai/run-cycle?scenario=critical-stalled`
 - `/api/ai/provider-config`
 - `/api/ai/provider-status`
+- `POST /api/ai/provider-probe`
+- `POST /api/deals/DL-1001/live-draft?scenario=critical-stalled`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -119,6 +121,7 @@ The UI now supports:
 - an AI control center with local autonomy policy management
 - an executable AI cycle that analyzes the queue and automates only what policy allows
 - a live-provider readiness panel with persisted provider config
+- a live provider probe and live-draft endpoint for the focused deal
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -177,6 +180,8 @@ AI provider endpoints:
 - `GET /api/ai/provider-config`
 - `POST /api/ai/provider-config`
 - `GET /api/ai/provider-status`
+- `POST /api/ai/provider-probe`
+- `POST /api/deals/DL-1001/live-draft?scenario=critical-stalled`
 
 Compliance endpoint:
 
@@ -207,3 +212,10 @@ Runtime resilience:
 This gives you a Windows-portable delivery folder without introducing Electron or a paid packaging stack.
 
 `release/pipeline-rescue-portable/app/.env.example` is included so a live AI provider can be configured without editing source files first.
+
+If you want live OpenAI calls in the portable package:
+
+1. copy `.env.example` to `.env`
+2. set `OPENAI_API_KEY`
+3. switch the provider from `NONE` to `OPENAI` in the app
+4. enable `Provider enabled` and `Allow live generation`

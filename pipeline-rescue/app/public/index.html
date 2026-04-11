@@ -95,6 +95,7 @@
             <button type="button" class="action-button" id="analyze-button">Analyze now</button>
             <button type="button" class="action-button" id="task-button">Create task</button>
             <button type="button" class="action-button" id="draft-button">Generate draft</button>
+            <button type="button" class="action-button" id="live-draft-button">Generate live draft</button>
           </section>
 
           <section class="task-state-panel" id="task-state-panel">
@@ -139,6 +140,7 @@
           <section class="draft-panel">
             <p class="eyebrow">Draft</p>
             <h3 id="draft-subject">Loading...</h3>
+            <p id="draft-meta" class="verification-note"></p>
             <p id="draft-body" class="draft-body"></p>
           </section>
         </article>
@@ -188,6 +190,7 @@
           <div class="verification-card" id="ai-provider-status"></div>
           <div class="feedback-form" id="ai-provider-form"></div>
           <div class="feedback-export-actions">
+            <button type="button" class="refresh-button" id="probe-ai-provider-button">Probe AI Provider</button>
             <button type="button" class="refresh-button" id="reload-ai-provider-button">Reload AI Provider</button>
             <button type="button" class="refresh-button secondary-button" id="save-ai-provider-button">Save AI Provider</button>
           </div>

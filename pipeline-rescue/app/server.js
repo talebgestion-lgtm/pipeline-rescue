@@ -7,6 +7,8 @@ const { createSystemReport } = require("./lib/system-report");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
 const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
+const { loadEnvFile } = require("./lib/env-loader");
+const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
@@ -15,7 +17,10 @@ const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
 const aiPolicyPath = path.join(rootDir, "data", "ai-policy.json");
 const aiProviderConfigPath = path.join(rootDir, "data", "ai-provider-config.json");
 const packagePath = path.join(rootDir, "package.json");
+const envPath = path.join(rootDir, ".env");
 const port = Number(process.env.PORT || 4179);
+
+loadEnvFile(envPath);
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -415,6 +420,40 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    const liveDraftMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/live-draft$/);
+    if (request.method === "POST" && liveDraftMatch) {
+      if (aiProviderState.error) {
+        sendJson(response, 500, {
+          error: "AI provider unavailable",
+          detail: aiProviderState.error
+        });
+        return;
+      }
+
+      const analysisPayload = appState.runtime.getAnalysis(scenarioId, liveDraftMatch[1]);
+      if (!analysisPayload) {
+        sendJson(response, 404, {
+          error: "Unknown live draft target",
+          scenarioId,
+          dealId: liveDraftMatch[1]
+        });
+        return;
+      }
+
+      const liveDraft = await generateLiveDraft({
+        config: aiProviderState.aiProviderConfig,
+        analysis: analysisPayload.analysis,
+        verification: analysisPayload.verification
+      });
+
+      sendJson(response, 200, {
+        scenarioId,
+        dealId: liveDraftMatch[1],
+        liveDraft
+      });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/events") {
       sendJson(response, 200, appState.runtime.getEvents(scenarioId));
       return;
@@ -562,6 +601,23 @@ const server = http.createServer(async (request, response) => {
         config: refreshedProviderState.aiProviderConfig,
         status: refreshedProviderState.aiProviderStatus
       });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/provider-probe") {
+      if (aiProviderState.error) {
+        sendJson(response, 500, {
+          error: "AI provider unavailable",
+          detail: aiProviderState.error
+        });
+        return;
+      }
+
+      const probe = await probeAiProvider({
+        config: aiProviderState.aiProviderConfig
+      });
+
+      sendJson(response, 200, probe);
       return;
     }
 
