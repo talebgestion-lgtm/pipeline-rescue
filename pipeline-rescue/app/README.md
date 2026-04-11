@@ -21,10 +21,22 @@ Open:
 http://localhost:4179
 ```
 
+Install as an app in Chromium browsers:
+
+- open `http://localhost:4179`
+- wait for the install card to report `Install ready` or `Shell ready`
+- use `Install App` or the browser menu `Install app` / `Add to home screen`
+
 Run regression checks:
 
 ```powershell
 npm test
+```
+
+Build a portable Windows release folder:
+
+```powershell
+npm run build:release
 ```
 
 ## Scope
@@ -36,6 +48,7 @@ It is intentionally:
 - dependency-light
 - deterministic
 - local-first
+- cross-platform friendly for low-cost pilots
 
 The scenario inputs come from:
 
@@ -72,6 +85,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/feedback/report?scenario=critical-stalled`
 - `/api/feedback/export?scenario=critical-stalled&format=json`
 - `/api/feedback/export?scenario=critical-stalled&format=csv`
+- `/api/ai/policy`
+- `/api/ai/control-center?scenario=critical-stalled`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -98,9 +113,12 @@ The UI now supports:
 - scenario reset
 - manager digest with coverage and owner breakdown
 - top friction patterns from dismissed field feedback
+- an AI control center with local autonomy policy management
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
+- a guided compliance form above the raw JSON editor
+- an installable PWA shell for desktop/mobile pilots
 
 ## Local state persistence
 
@@ -142,6 +160,12 @@ Feedback reporting now also exposes:
 - top friction patterns
 - enriched JSON and CSV exports with theme labels
 
+AI policy endpoints:
+
+- `GET /api/ai/policy`
+- `POST /api/ai/policy`
+- `GET /api/ai/control-center?scenario=critical-stalled`
+
 Compliance endpoint:
 
 - `GET /api/compliance/report`
@@ -159,3 +183,13 @@ Runtime resilience:
 
 - atomic writes for the local runtime state file
 - automatic archive of corrupt state files before clean recovery
+
+## Portable release output
+
+`npm run build:release` creates:
+
+- `release/pipeline-rescue-portable/app/`
+- `release/pipeline-rescue-portable/launch-pipeline-rescue.cmd`
+- `release/pipeline-rescue-portable/README.txt`
+
+This gives you a Windows-portable delivery folder without introducing Electron or a paid packaging stack.

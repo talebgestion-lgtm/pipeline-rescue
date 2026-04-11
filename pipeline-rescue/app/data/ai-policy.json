@@ -1,0 +1,13 @@
+{
+  "autonomyMode": "ASSISTED",
+  "minimumRecommendationTrustScore": 85,
+  "minimumVerificationStabilityScore": 80,
+  "maxAutomatedDealsPerCycle": 12,
+  "correctionPassEnabled": true,
+  "memoryProtocol": "CYCLE_ISOLATED",
+  "hallucinationGuard": "STRICT",
+  "humanApprovalRequiredFor": [
+    "CUSTOMER_DRAFTS",
+    "TASK_WRITES"
+  ]
+}

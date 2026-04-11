@@ -2,7 +2,10 @@ const appState = {
   catalog: null,
   scenarioId: null,
   overview: null,
-  focusedDealId: null
+  focusedDealId: null,
+  installPrompt: null,
+  serviceWorkerReady: false,
+  installReady: false
 };
 
 function getSearchScenario() {
@@ -55,6 +58,14 @@ async function loadFeedbackReport() {
   return fetchJson(buildScenarioUrl("/api/feedback/report"));
 }
 
+async function loadAiPolicy() {
+  return fetchJson("/api/ai/policy");
+}
+
+async function loadAiControlCenter() {
+  return fetchJson(buildScenarioUrl("/api/ai/control-center"));
+}
+
 async function loadComplianceReport() {
   return fetchJson("/api/compliance/report");
 }
@@ -96,6 +107,18 @@ async function saveComplianceConfig(config) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config)
   });
+}
+
+async function saveAiPolicy(policy) {
+  return fetchJson("/api/ai/policy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(policy)
+  });
+}
+
+function isStandaloneMode() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
 function formatCurrency(value) {
@@ -524,6 +547,174 @@ function renderSystemReport(report) {
   `;
 }
 
+function renderInstallState() {
+  const installStatus = document.getElementById("install-status");
+  const installButton = document.getElementById("install-app-button");
+
+  if (isStandaloneMode()) {
+    installStatus.innerHTML = `
+      <span class="install-status-strong">Installed.</span>
+      Pipeline Rescue is already running in standalone mode on this device.
+    `;
+    installButton.hidden = true;
+    installButton.disabled = true;
+    return;
+  }
+
+  if (!("serviceWorker" in navigator)) {
+    installStatus.innerHTML = `
+      <span class="install-status-strong">Install unavailable.</span>
+      This browser cannot register the application shell.
+    `;
+    installButton.hidden = true;
+    installButton.disabled = true;
+    return;
+  }
+
+  if (appState.installReady) {
+    installStatus.innerHTML = `
+      <span class="install-status-strong">Install ready.</span>
+      The cached shell is active. Use the button to install the app on this device.
+      <span class="install-helper">If the prompt closes, reload the page to request it again.</span>
+    `;
+    installButton.hidden = false;
+    installButton.disabled = false;
+    return;
+  }
+
+  if (appState.serviceWorkerReady) {
+    installStatus.innerHTML = `
+      <span class="install-status-strong">Shell ready.</span>
+      Offline assets are cached. If the browser does not expose the install prompt automatically,
+      use the browser menu and choose Install app or Add to home screen.
+    `;
+    installButton.hidden = true;
+    installButton.disabled = true;
+    return;
+  }
+
+  installStatus.innerHTML = `
+    <span class="install-status-strong">Preparing shell.</span>
+    Registering the local application shell and install hooks.
+  `;
+  installButton.hidden = true;
+  installButton.disabled = true;
+}
+
+function renderAiControlCenter(report) {
+  const checks = report.checks || [];
+  const blockers = report.blockers || [];
+  const envelope = report.automationEnvelope || {};
+  const policySnapshot = report.policySnapshot || {};
+
+  document.getElementById("ai-control-report").innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Status</span>
+        <span class="verification-value">${report.status}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Autonomy mode</span>
+        <span class="verification-value">${report.metrics?.autonomyMode || "UNKNOWN"}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Trust gate</span>
+        <span class="verification-value">${report.metrics?.trustScore ?? 0}/${report.metrics?.trustThreshold ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Verification gate</span>
+        <span class="verification-value">${report.metrics?.verificationScore ?? 0}/${report.metrics?.verificationThreshold ?? 0}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${report.summary}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Automation envelope</p>
+      <ul class="verification-list">
+        <li>Draft automation: ${envelope.draftAutomationAllowed ? "ALLOWED" : "HUMAN_REVIEW"}</li>
+        <li>Task automation: ${envelope.taskAutomationAllowed ? "ALLOWED" : "HUMAN_REVIEW"}</li>
+        <li>Digest automation: ${envelope.digestAutomationAllowed ? "ALLOWED" : "HUMAN_REVIEW"}</li>
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Blockers</p>
+      <ul class="verification-list">
+        ${blockers.map((item) => `<li>${item}</li>`).join("") || "<li>No blocker reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${checks.map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Policy snapshot</p>
+      <p class="verification-note">Memory: ${policySnapshot.memoryProtocol || "UNKNOWN"} | Guard: ${policySnapshot.hallucinationGuard || "UNKNOWN"} | Correction pass: ${policySnapshot.correctionPassEnabled ? "ENABLED" : "DISABLED"} | Human approvals: ${(policySnapshot.humanApprovalRequiredFor || []).join(", ") || "none"}.</p>
+    </div>
+  `;
+}
+
+function renderAiPolicyForm(policy) {
+  const approvals = new Set(policy.humanApprovalRequiredFor || []);
+
+  document.getElementById("ai-policy-form").innerHTML = `
+    <label class="score-label" for="ai-autonomy-mode-input">Autonomy mode</label>
+    <select id="ai-autonomy-mode-input" class="scenario-select">
+      <option value="ADVISOR_ONLY" ${policy.autonomyMode === "ADVISOR_ONLY" ? "selected" : ""}>Advisor only</option>
+      <option value="ASSISTED" ${policy.autonomyMode === "ASSISTED" ? "selected" : ""}>Assisted</option>
+      <option value="SUPERVISED_AUTOPILOT" ${policy.autonomyMode === "SUPERVISED_AUTOPILOT" ? "selected" : ""}>Supervised autopilot</option>
+    </select>
+    <label class="score-label" for="ai-trust-threshold-input">Minimum trust score</label>
+    <input id="ai-trust-threshold-input" class="scenario-select" type="number" min="0" max="100" value="${policy.minimumRecommendationTrustScore}">
+    <label class="score-label" for="ai-verification-threshold-input">Minimum verification stability score</label>
+    <input id="ai-verification-threshold-input" class="scenario-select" type="number" min="0" max="100" value="${policy.minimumVerificationStabilityScore}">
+    <label class="score-label" for="ai-cycle-limit-input">Max automated deals per cycle</label>
+    <input id="ai-cycle-limit-input" class="scenario-select" type="number" min="0" value="${policy.maxAutomatedDealsPerCycle}">
+    <label class="score-label" for="ai-memory-protocol-input">Memory protocol</label>
+    <select id="ai-memory-protocol-input" class="scenario-select">
+      <option value="CYCLE_ISOLATED" ${policy.memoryProtocol === "CYCLE_ISOLATED" ? "selected" : ""}>Cycle isolated</option>
+      <option value="SCENARIO_SCOPED" ${policy.memoryProtocol === "SCENARIO_SCOPED" ? "selected" : ""}>Scenario scoped</option>
+    </select>
+    <label class="score-label" for="ai-hallucination-guard-input">Hallucination guard</label>
+    <select id="ai-hallucination-guard-input" class="scenario-select">
+      <option value="STRICT" ${policy.hallucinationGuard === "STRICT" ? "selected" : ""}>Strict</option>
+      <option value="STANDARD" ${policy.hallucinationGuard === "STANDARD" ? "selected" : ""}>Standard</option>
+    </select>
+    <label class="verification-note"><input type="checkbox" id="ai-correction-pass-input" ${policy.correctionPassEnabled ? "checked" : ""}> Correction pass enabled</label>
+    <p class="score-label">Human approval required for</p>
+    <label class="verification-note"><input type="checkbox" id="ai-approval-drafts-input" ${approvals.has("CUSTOMER_DRAFTS") ? "checked" : ""}> Customer drafts</label>
+    <label class="verification-note"><input type="checkbox" id="ai-approval-tasks-input" ${approvals.has("TASK_WRITES") ? "checked" : ""}> Task writes</label>
+    <label class="verification-note"><input type="checkbox" id="ai-approval-digests-input" ${approvals.has("MANAGER_DIGESTS") ? "checked" : ""}> Manager digests</label>
+  `;
+}
+
+function collectAiPolicyForm() {
+  const approvals = [];
+  if (document.getElementById("ai-approval-drafts-input").checked) {
+    approvals.push("CUSTOMER_DRAFTS");
+  }
+  if (document.getElementById("ai-approval-tasks-input").checked) {
+    approvals.push("TASK_WRITES");
+  }
+  if (document.getElementById("ai-approval-digests-input").checked) {
+    approvals.push("MANAGER_DIGESTS");
+  }
+
+  return {
+    autonomyMode: document.getElementById("ai-autonomy-mode-input").value,
+    minimumRecommendationTrustScore: Number(document.getElementById("ai-trust-threshold-input").value),
+    minimumVerificationStabilityScore: Number(document.getElementById("ai-verification-threshold-input").value),
+    maxAutomatedDealsPerCycle: Number(document.getElementById("ai-cycle-limit-input").value),
+    correctionPassEnabled: document.getElementById("ai-correction-pass-input").checked,
+    memoryProtocol: document.getElementById("ai-memory-protocol-input").value,
+    hallucinationGuard: document.getElementById("ai-hallucination-guard-input").value,
+    humanApprovalRequiredFor: approvals
+  };
+}
+
 function renderComplianceConfig(config) {
   document.getElementById("compliance-config-input").value = JSON.stringify(config, null, 2);
 }
@@ -705,6 +896,14 @@ async function refreshFeedbackReport() {
   renderFeedbackReport(await loadFeedbackReport());
 }
 
+async function refreshAiControlCenter() {
+  renderAiControlCenter(await loadAiControlCenter());
+}
+
+async function refreshAiPolicy() {
+  renderAiPolicyForm(await loadAiPolicy());
+}
+
 async function refreshComplianceReport() {
   renderComplianceReport(await loadComplianceReport());
 }
@@ -755,6 +954,8 @@ async function renderScenario(catalog, scenarioId) {
   applyOverview(catalog, scenarioId, overview);
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -767,6 +968,8 @@ async function handleAnalyzeClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -779,6 +982,8 @@ async function handleTaskClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -807,6 +1012,8 @@ async function handleFeedbackUsefulClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -823,6 +1030,8 @@ async function handleFeedbackDismissClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -844,9 +1053,34 @@ async function handleResetClick() {
   applyOverview(appState.catalog, appState.scenarioId, payload.overview);
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshAiControlCenter();
+  await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
+}
+
+async function handleReloadAiPolicyClick() {
+  try {
+    await refreshAiPolicy();
+    await refreshAiControlCenter();
+  } catch (error) {
+    document.getElementById("ai-control-report").innerHTML = `
+      <p class="verification-note">AI policy reload failed: ${error.message}</p>
+    `;
+  }
+}
+
+async function handleSaveAiPolicyClick() {
+  try {
+    const response = await saveAiPolicy(collectAiPolicyForm());
+    renderAiPolicyForm(response.policy);
+    renderAiControlCenter(response.report);
+  } catch (error) {
+    document.getElementById("ai-control-report").innerHTML = `
+      <p class="verification-note">AI policy save failed: ${error.message}</p>
+    `;
+  }
 }
 
 async function handleReloadComplianceConfigClick() {
@@ -887,6 +1121,40 @@ function handleApplyGuidedComplianceClick() {
   }
 }
 
+async function registerInstallShell() {
+  renderInstallState();
+
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+
+  try {
+    await navigator.serviceWorker.register("/service-worker.js");
+    appState.serviceWorkerReady = true;
+  } catch (error) {
+    document.getElementById("install-status").innerHTML = `
+      <span class="install-status-strong">Shell failed.</span>
+      Service worker registration failed: ${escapeHtml(error.message)}
+    `;
+    return;
+  }
+
+  renderInstallState();
+}
+
+async function handleInstallAppClick() {
+  if (!appState.installPrompt) {
+    renderInstallState();
+    return;
+  }
+
+  await appState.installPrompt.prompt();
+  await appState.installPrompt.userChoice;
+  appState.installPrompt = null;
+  appState.installReady = false;
+  renderInstallState();
+}
+
 async function main() {
   const select = document.getElementById("scenario-select");
   const refreshButton = document.getElementById("refresh-button");
@@ -897,8 +1165,32 @@ async function main() {
   const reloadComplianceConfigButton = document.getElementById("reload-compliance-config-button");
   const saveComplianceConfigButton = document.getElementById("save-compliance-config-button");
   const applyGuidedComplianceButton = document.getElementById("apply-guided-compliance-button");
+  const installAppButton = document.getElementById("install-app-button");
+  const reloadAiPolicyButton = document.getElementById("reload-ai-policy-button");
+  const saveAiPolicyButton = document.getElementById("save-ai-policy-button");
 
   try {
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      appState.installPrompt = event;
+      appState.installReady = true;
+      renderInstallState();
+    });
+
+    window.addEventListener("appinstalled", () => {
+      appState.installPrompt = null;
+      appState.installReady = false;
+      renderInstallState();
+    });
+
+    const displayModeQuery = window.matchMedia("(display-mode: standalone)");
+    if (typeof displayModeQuery.addEventListener === "function") {
+      displayModeQuery.addEventListener("change", renderInstallState);
+    }
+
+    installAppButton.addEventListener("click", handleInstallAppClick);
+    await registerInstallShell();
+
     const catalog = await loadScenarios();
     const initialScenario = getSearchScenario() || catalog.defaultScenario;
 
@@ -923,6 +1215,8 @@ async function main() {
     exportCsvButton.addEventListener("click", async () => {
       await handleFeedbackExportClick("csv");
     });
+    reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
+    saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
@@ -937,6 +1231,7 @@ async function main() {
     });
 
     await renderScenario(catalog, initialScenario);
+    renderInstallState();
   } catch (error) {
     document.getElementById("meta-card").innerHTML = `
       <p class="status-label">Error</p>

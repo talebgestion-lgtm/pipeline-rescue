@@ -446,6 +446,16 @@ h1 {
   line-height: 1.6;
 }
 
+.install-status-strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.install-helper {
+  display: block;
+  margin-top: 10px;
+}
+
 .manager-report {
   margin-top: 18px;
   padding: 18px;

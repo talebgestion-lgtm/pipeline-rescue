@@ -4,6 +4,11 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Pipeline Rescue Starter</title>
+    <meta name="theme-color" content="#08111f">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/app-icon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -32,6 +37,21 @@
           </div>
         </header>
         <div class="verification-card" id="system-report"></div>
+      </section>
+
+      <section class="panel">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Install</p>
+            <h2>App shell</h2>
+          </div>
+        </header>
+        <div class="verification-card" id="install-card">
+          <p class="verification-note" id="install-status">Checking install support...</p>
+          <div class="feedback-export-actions">
+            <button type="button" class="refresh-button" id="install-app-button" hidden>Install App</button>
+          </div>
+        </div>
       </section>
 
       <section class="control-strip">
@@ -142,6 +162,19 @@
           <div class="feedback-export-actions">
             <button type="button" class="refresh-button" id="export-feedback-json-button">Export Feedback JSON</button>
             <button type="button" class="refresh-button secondary-button" id="export-feedback-csv-button">Export Feedback CSV</button>
+          </div>
+
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">AI Ops</p>
+              <h2>Control center</h2>
+            </div>
+          </header>
+          <div class="verification-card" id="ai-control-report"></div>
+          <div class="feedback-form" id="ai-policy-form"></div>
+          <div class="feedback-export-actions">
+            <button type="button" class="refresh-button" id="reload-ai-policy-button">Reload AI Policy</button>
+            <button type="button" class="refresh-button secondary-button" id="save-ai-policy-button">Save AI Policy</button>
           </div>
 
           <header class="panel-header">

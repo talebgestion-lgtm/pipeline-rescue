@@ -4,11 +4,13 @@ const path = require("node:path");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
 const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
 const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
+const aiPolicyPath = path.join(rootDir, "data", "ai-policy.json");
 const packagePath = path.join(rootDir, "package.json");
 const port = Number(process.env.PORT || 4179);
 
@@ -29,7 +31,7 @@ function saveJsonAtomic(filePath, payload) {
   fs.renameSync(tempFilePath, filePath);
 }
 
-function sendFile(response, filePath) {
+function sendFile(response, filePath, extraHeaders = {}) {
   fs.readFile(filePath, (error, content) => {
     if (error) {
       sendJson(response, 404, { error: "Not found" });
@@ -41,9 +43,11 @@ function sendFile(response, filePath) {
       ext === ".html" ? "text/html; charset=utf-8" :
       ext === ".css" ? "text/css; charset=utf-8" :
       ext === ".js" ? "application/javascript; charset=utf-8" :
+      ext === ".webmanifest" ? "application/manifest+json; charset=utf-8" :
+      ext === ".svg" ? "image/svg+xml; charset=utf-8" :
       "text/plain; charset=utf-8";
 
-    response.writeHead(200, { "Content-Type": contentType });
+    response.writeHead(200, { "Content-Type": contentType, ...extraHeaders });
     response.end(content);
   });
 }
@@ -58,6 +62,10 @@ function readGdprConfig() {
 
 function readPackageManifest() {
   return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+}
+
+function readAiPolicy() {
+  return validateAiPolicyPayload(JSON.parse(fs.readFileSync(aiPolicyPath, "utf8")));
 }
 
 function validateComplianceConfigPayload(payload) {
@@ -144,8 +152,24 @@ function getGdprState() {
   }
 }
 
+function getAiPolicyState() {
+  try {
+    const aiPolicy = readAiPolicy();
+    return {
+      aiPolicy,
+      error: null
+    };
+  } catch (error) {
+    return {
+      aiPolicy: null,
+      error: error.message
+    };
+  }
+}
+
 function buildSystemState(appState) {
   const gdprState = getGdprState();
+  const aiPolicyState = getAiPolicyState();
   const systemReport = createSystemReport({
     packageManifest: appState.packageManifest,
     fixtures: appState.fixtures,
@@ -156,6 +180,7 @@ function buildSystemState(appState) {
 
   return {
     gdprState,
+    aiPolicyState,
     systemReport
   };
 }
@@ -178,7 +203,7 @@ const server = http.createServer(async (request, response) => {
   try {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
-    const { gdprState, systemReport } = buildSystemState(appState);
+    const { gdprState, aiPolicyState, systemReport } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
       || (appState.fixtures ? appState.fixtures.defaultScenario : null);
 
@@ -194,6 +219,19 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/system/report") {
       sendJson(response, 200, systemReport);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/ai/policy") {
+      if (aiPolicyState.error) {
+        sendJson(response, 500, {
+          error: "AI policy unavailable",
+          detail: aiPolicyState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, aiPolicyState.aiPolicy);
       return;
     }
 
@@ -340,6 +378,35 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/ai/control-center") {
+      if (aiPolicyState.error) {
+        sendJson(response, 500, {
+          error: "AI policy unavailable",
+          detail: aiPolicyState.error
+        });
+        return;
+      }
+
+      const overview = appState.runtime.getOverview(scenarioId);
+      if (!overview) {
+        sendJson(response, 404, {
+          error: "Unknown scenario",
+          scenarioId
+        });
+        return;
+      }
+
+      const feedbackReport = appState.runtime.getFeedbackReport(scenarioId);
+      const complianceReport = gdprState.complianceReport || createComplianceReport(readGdprConfig());
+      sendJson(response, 200, createAiControlReport({
+        policy: aiPolicyState.aiPolicy,
+        overview,
+        feedbackReport,
+        complianceReport
+      }));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/compliance/report") {
       if (gdprState.error) {
         sendJson(response, 500, {
@@ -381,6 +448,25 @@ const server = http.createServer(async (request, response) => {
           gdprState: refreshedState,
           runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
           startupError: appState.startupError
+        })
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/policy") {
+      const body = validateAiPolicyPayload(await readJsonBody(request));
+      saveJsonAtomic(aiPolicyPath, body);
+
+      const refreshedPolicyState = getAiPolicyState();
+      const overview = appState.runtime.getOverview(scenarioId);
+      const feedbackReport = appState.runtime.getFeedbackReport(scenarioId);
+      sendJson(response, 200, {
+        policy: refreshedPolicyState.aiPolicy,
+        report: createAiControlReport({
+          policy: refreshedPolicyState.aiPolicy,
+          overview,
+          feedbackReport,
+          complianceReport: gdprState.complianceReport || createComplianceReport(readGdprConfig())
         })
       });
       return;
@@ -430,6 +516,23 @@ const server = http.createServer(async (request, response) => {
 
     if (url.pathname === "/app.js") {
       sendFile(response, path.join(publicDir, "app.js"));
+      return;
+    }
+
+    if (url.pathname === "/manifest.webmanifest") {
+      sendFile(response, path.join(publicDir, "manifest.webmanifest"));
+      return;
+    }
+
+    if (url.pathname === "/service-worker.js") {
+      sendFile(response, path.join(publicDir, "service-worker.js"), {
+        "Cache-Control": "no-cache"
+      });
+      return;
+    }
+
+    if (url.pathname === "/app-icon.svg") {
+      sendFile(response, path.join(publicDir, "app-icon.svg"));
       return;
     }
 

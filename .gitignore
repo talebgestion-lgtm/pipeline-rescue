@@ -4,3 +4,4 @@
 !pipeline-rescue/
 !pipeline-rescue/**
 pipeline-rescue/app/data/runtime-state.json
+pipeline-rescue/app/release/
