@@ -62,6 +62,14 @@ async function loadAiPolicy() {
   return fetchJson("/api/ai/policy");
 }
 
+async function loadAiProviderConfig() {
+  return fetchJson("/api/ai/provider-config");
+}
+
+async function loadAiProviderStatus() {
+  return fetchJson("/api/ai/provider-status");
+}
+
 async function loadAiControlCenter() {
   return fetchJson(buildScenarioUrl("/api/ai/control-center"));
 }
@@ -120,6 +128,14 @@ async function saveAiPolicy(policy) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(policy)
+  });
+}
+
+async function saveAiProviderConfig(config) {
+  return fetchJson("/api/ai/provider-config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config)
   });
 }
 
@@ -697,6 +713,69 @@ function renderAiPolicyForm(policy) {
   `;
 }
 
+function renderAiProviderStatus(report) {
+  document.getElementById("ai-provider-status").innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Status</span>
+        <span class="verification-value">${report.status}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Provider</span>
+        <span class="verification-value">${report.provider}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Model</span>
+        <span class="verification-value">${report.model}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Live generation</span>
+        <span class="verification-value">${report.configSnapshot?.allowLiveGeneration ? "ON" : "OFF"}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${report.summary}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Blockers</p>
+      <ul class="verification-list">
+        ${(report.blockers || []).map((item) => `<li>${item}</li>`).join("") || "<li>No blocker reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderAiProviderForm(config) {
+  document.getElementById("ai-provider-form").innerHTML = `
+    <label class="score-label" for="ai-provider-select">Provider</label>
+    <select id="ai-provider-select" class="scenario-select">
+      <option value="NONE" ${config.provider === "NONE" ? "selected" : ""}>None</option>
+      <option value="OPENAI" ${config.provider === "OPENAI" ? "selected" : ""}>OpenAI</option>
+    </select>
+    <label class="verification-note"><input type="checkbox" id="ai-provider-enabled-input" ${config.enabled ? "checked" : ""}> Provider enabled</label>
+    <label class="verification-note"><input type="checkbox" id="ai-provider-live-input" ${config.allowLiveGeneration ? "checked" : ""}> Allow live generation</label>
+    <label class="score-label" for="ai-provider-base-url-input">Base URL</label>
+    <input id="ai-provider-base-url-input" class="scenario-select" value="${escapeHtml(config.baseUrl)}">
+    <label class="score-label" for="ai-provider-model-input">Model</label>
+    <input id="ai-provider-model-input" class="scenario-select" value="${escapeHtml(config.model)}">
+    <label class="score-label" for="ai-provider-env-input">API key env var</label>
+    <input id="ai-provider-env-input" class="scenario-select" value="${escapeHtml(config.apiKeyEnvVar)}">
+    <label class="score-label" for="ai-provider-timeout-input">Request timeout (ms)</label>
+    <input id="ai-provider-timeout-input" class="scenario-select" type="number" min="1000" value="${config.requestTimeoutMs}">
+    <label class="score-label" for="ai-provider-temperature-input">Temperature</label>
+    <input id="ai-provider-temperature-input" class="scenario-select" type="number" min="0" max="2" step="0.1" value="${config.temperature}">
+    <label class="score-label" for="ai-provider-max-tokens-input">Max output tokens</label>
+    <input id="ai-provider-max-tokens-input" class="scenario-select" type="number" min="1" value="${config.maxOutputTokens}">
+  `;
+}
+
 function renderAiCycleReport(report) {
   const container = document.getElementById("ai-cycle-report");
 
@@ -768,6 +847,20 @@ function collectAiPolicyForm() {
     memoryProtocol: document.getElementById("ai-memory-protocol-input").value,
     hallucinationGuard: document.getElementById("ai-hallucination-guard-input").value,
     humanApprovalRequiredFor: approvals
+  };
+}
+
+function collectAiProviderForm() {
+  return {
+    provider: document.getElementById("ai-provider-select").value,
+    enabled: document.getElementById("ai-provider-enabled-input").checked,
+    allowLiveGeneration: document.getElementById("ai-provider-live-input").checked,
+    baseUrl: document.getElementById("ai-provider-base-url-input").value.trim(),
+    model: document.getElementById("ai-provider-model-input").value.trim(),
+    apiKeyEnvVar: document.getElementById("ai-provider-env-input").value.trim(),
+    requestTimeoutMs: Number(document.getElementById("ai-provider-timeout-input").value),
+    temperature: Number(document.getElementById("ai-provider-temperature-input").value),
+    maxOutputTokens: Number(document.getElementById("ai-provider-max-tokens-input").value)
   };
 }
 
@@ -960,6 +1053,12 @@ async function refreshAiPolicy() {
   renderAiPolicyForm(await loadAiPolicy());
 }
 
+async function refreshAiProvider() {
+  const [config, status] = await Promise.all([loadAiProviderConfig(), loadAiProviderStatus()]);
+  renderAiProviderForm(config);
+  renderAiProviderStatus(status);
+}
+
 async function refreshComplianceReport() {
   renderComplianceReport(await loadComplianceReport());
 }
@@ -1013,6 +1112,7 @@ async function renderScenario(catalog, scenarioId) {
   await refreshFeedbackReport();
   await refreshAiControlCenter();
   await refreshAiPolicy();
+  await refreshAiProvider();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -1150,9 +1250,32 @@ async function handleRunAiCycleClick() {
     await refreshFeedbackReport();
     await refreshAiControlCenter();
     await refreshAiPolicy();
+    await refreshAiProvider();
   } catch (error) {
     document.getElementById("ai-cycle-report").innerHTML = `
       <p class="verification-note">AI cycle failed: ${error.message}</p>
+    `;
+  }
+}
+
+async function handleReloadAiProviderClick() {
+  try {
+    await refreshAiProvider();
+  } catch (error) {
+    document.getElementById("ai-provider-status").innerHTML = `
+      <p class="verification-note">AI provider reload failed: ${error.message}</p>
+    `;
+  }
+}
+
+async function handleSaveAiProviderClick() {
+  try {
+    const response = await saveAiProviderConfig(collectAiProviderForm());
+    renderAiProviderForm(response.config);
+    renderAiProviderStatus(response.status);
+  } catch (error) {
+    document.getElementById("ai-provider-status").innerHTML = `
+      <p class="verification-note">AI provider save failed: ${error.message}</p>
     `;
   }
 }
@@ -1243,6 +1366,8 @@ async function main() {
   const reloadAiPolicyButton = document.getElementById("reload-ai-policy-button");
   const saveAiPolicyButton = document.getElementById("save-ai-policy-button");
   const runAiCycleButton = document.getElementById("run-ai-cycle-button");
+  const reloadAiProviderButton = document.getElementById("reload-ai-provider-button");
+  const saveAiProviderButton = document.getElementById("save-ai-provider-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1293,6 +1418,8 @@ async function main() {
     runAiCycleButton.addEventListener("click", handleRunAiCycleClick);
     reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
     saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
+    reloadAiProviderButton.addEventListener("click", handleReloadAiProviderClick);
+    saveAiProviderButton.addEventListener("click", handleSaveAiProviderClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);

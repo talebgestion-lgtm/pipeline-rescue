@@ -1,0 +1,11 @@
+{
+  "provider": "NONE",
+  "enabled": false,
+  "allowLiveGeneration": false,
+  "baseUrl": "https://api.openai.com/v1",
+  "model": "gpt-5.4-mini",
+  "apiKeyEnvVar": "OPENAI_API_KEY",
+  "requestTimeoutMs": 15000,
+  "temperature": 0.2,
+  "maxOutputTokens": 900
+}

@@ -6,12 +6,14 @@ const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
+const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
 const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
 const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
 const aiPolicyPath = path.join(rootDir, "data", "ai-policy.json");
+const aiProviderConfigPath = path.join(rootDir, "data", "ai-provider-config.json");
 const packagePath = path.join(rootDir, "package.json");
 const port = Number(process.env.PORT || 4179);
 
@@ -67,6 +69,10 @@ function readPackageManifest() {
 
 function readAiPolicy() {
   return validateAiPolicyPayload(JSON.parse(fs.readFileSync(aiPolicyPath, "utf8")));
+}
+
+function readAiProviderConfig() {
+  return validateAiProviderConfigPayload(JSON.parse(fs.readFileSync(aiProviderConfigPath, "utf8")));
 }
 
 function validateComplianceConfigPayload(payload) {
@@ -168,9 +174,27 @@ function getAiPolicyState() {
   }
 }
 
+function getAiProviderState() {
+  try {
+    const aiProviderConfig = readAiProviderConfig();
+    return {
+      aiProviderConfig,
+      aiProviderStatus: createAiProviderStatus({ config: aiProviderConfig }),
+      error: null
+    };
+  } catch (error) {
+    return {
+      aiProviderConfig: null,
+      aiProviderStatus: null,
+      error: error.message
+    };
+  }
+}
+
 function buildSystemState(appState) {
   const gdprState = getGdprState();
   const aiPolicyState = getAiPolicyState();
+  const aiProviderState = getAiProviderState();
   const systemReport = createSystemReport({
     packageManifest: appState.packageManifest,
     fixtures: appState.fixtures,
@@ -182,6 +206,7 @@ function buildSystemState(appState) {
   return {
     gdprState,
     aiPolicyState,
+    aiProviderState,
     systemReport
   };
 }
@@ -204,7 +229,7 @@ const server = http.createServer(async (request, response) => {
   try {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
-    const { gdprState, aiPolicyState, systemReport } = buildSystemState(appState);
+    const { gdprState, aiPolicyState, aiProviderState, systemReport } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
       || (appState.fixtures ? appState.fixtures.defaultScenario : null);
 
@@ -233,6 +258,32 @@ const server = http.createServer(async (request, response) => {
       }
 
       sendJson(response, 200, aiPolicyState.aiPolicy);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/ai/provider-config") {
+      if (aiProviderState.error) {
+        sendJson(response, 500, {
+          error: "AI provider config unavailable",
+          detail: aiProviderState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, aiProviderState.aiProviderConfig);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/ai/provider-status") {
+      if (aiProviderState.error) {
+        sendJson(response, 500, {
+          error: "AI provider status unavailable",
+          detail: aiProviderState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, aiProviderState.aiProviderStatus);
       return;
     }
 
@@ -498,6 +549,18 @@ const server = http.createServer(async (request, response) => {
           feedbackReport,
           complianceReport: gdprState.complianceReport || createComplianceReport(readGdprConfig())
         })
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/provider-config") {
+      const body = validateAiProviderConfigPayload(await readJsonBody(request));
+      saveJsonAtomic(aiProviderConfigPath, body);
+
+      const refreshedProviderState = getAiProviderState();
+      sendJson(response, 200, {
+        config: refreshedProviderState.aiProviderConfig,
+        status: refreshedProviderState.aiProviderStatus
       });
       return;
     }

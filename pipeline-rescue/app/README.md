@@ -88,6 +88,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/ai/policy`
 - `/api/ai/control-center?scenario=critical-stalled`
 - `POST /api/ai/run-cycle?scenario=critical-stalled`
+- `/api/ai/provider-config`
+- `/api/ai/provider-status`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -116,6 +118,7 @@ The UI now supports:
 - top friction patterns from dismissed field feedback
 - an AI control center with local autonomy policy management
 - an executable AI cycle that analyzes the queue and automates only what policy allows
+- a live-provider readiness panel with persisted provider config
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -169,6 +172,12 @@ AI policy endpoints:
 - `GET /api/ai/control-center?scenario=critical-stalled`
 - `POST /api/ai/run-cycle?scenario=critical-stalled`
 
+AI provider endpoints:
+
+- `GET /api/ai/provider-config`
+- `POST /api/ai/provider-config`
+- `GET /api/ai/provider-status`
+
 Compliance endpoint:
 
 - `GET /api/compliance/report`
@@ -196,3 +205,5 @@ Runtime resilience:
 - `release/pipeline-rescue-portable/README.txt`
 
 This gives you a Windows-portable delivery folder without introducing Electron or a paid packaging stack.
+
+`release/pipeline-rescue-portable/app/.env.example` is included so a live AI provider can be configured without editing source files first.

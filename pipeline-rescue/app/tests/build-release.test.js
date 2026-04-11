@@ -16,6 +16,7 @@ test("buildRelease creates a portable package without runtime state", () => {
 
     assert.equal(fs.existsSync(result.launcherPath), true);
     assert.equal(fs.existsSync(path.join(result.appDir, "server.js")), true);
+    assert.equal(fs.existsSync(path.join(result.appDir, ".env.example")), true);
     assert.equal(fs.existsSync(path.join(result.appDir, "public", "manifest.webmanifest")), true);
     assert.equal(fs.existsSync(path.join(result.outputDir, "README.txt")), true);
     assert.equal(fs.existsSync(path.join(result.appDir, "data", "runtime-state.json")), false);

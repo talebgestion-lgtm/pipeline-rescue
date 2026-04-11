@@ -43,7 +43,7 @@ function buildRelease(options = {}) {
   fs.rmSync(outputDir, { recursive: true, force: true });
   ensureDir(appDir);
 
-  for (const asset of ["server.js", "package.json", "README.md", "data", "lib", "public"]) {
+  for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public"]) {
     copyRecursive(path.join(appRoot, asset), path.join(appDir, asset), {
       exclude: new Set(["runtime-state.json", "release"])
     });
