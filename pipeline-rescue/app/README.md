@@ -80,6 +80,7 @@ The UI now supports:
 - queue-to-focus navigation
 - recent pilot event log
 - scenario reset
+- manager digest with coverage and owner breakdown
 
 ## Local state persistence
 
@@ -96,3 +97,7 @@ It is safe for demo use and can be reset from the UI or via:
 
 - `POST /api/runtime/reset?scenario=critical-stalled`
 - `GET /api/runtime/export`
+
+Manager reporting endpoint:
+
+- `GET /api/manager/report?scenario=critical-stalled`

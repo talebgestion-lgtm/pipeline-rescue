@@ -137,6 +137,11 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/manager/report") {
+    sendJson(response, 200, runtime.getManagerReport(scenarioId));
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/runtime/export") {
     sendJson(response, 200, runtime.exportState());
     return;

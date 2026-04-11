@@ -250,6 +250,85 @@ function createRuntime(fixtures, options = {}) {
     };
   }
 
+  function getManagerReport(scenarioId) {
+    const overview = getOverview(scenarioId);
+
+    if (!overview) {
+      return null;
+    }
+
+    const state = ensureScenarioState(scenarioId);
+    const events = state.events.slice();
+    const touchedDealIds = new Set(
+      events
+        .map((event) => event.properties && event.properties.dealId)
+        .filter(Boolean)
+    );
+    const queue = overview.queue || [];
+    const atRiskQueue = queue.filter((item) => typeof item.rescueScore === "number" && item.rescueScore >= 50);
+    const atRiskWithTask = atRiskQueue.filter((item) => item.taskStatus && item.taskStatus !== "NOT_CREATED");
+
+    const topReasons = Object.entries(
+      queue.reduce((accumulator, item) => {
+        accumulator[item.topReason] = (accumulator[item.topReason] || 0) + 1;
+        return accumulator;
+      }, {})
+    )
+      .map(([reasonCode, count]) => ({ reasonCode, count }))
+      .sort((left, right) => right.count - left.count)
+      .slice(0, 3);
+
+    const ownerBreakdown = Object.values(
+      queue.reduce((accumulator, item) => {
+        if (!accumulator[item.owner]) {
+          accumulator[item.owner] = {
+            owner: item.owner,
+            queueDeals: 0,
+            atRiskDeals: 0,
+            taskedDeals: 0
+          };
+        }
+
+        accumulator[item.owner].queueDeals += 1;
+        if (typeof item.rescueScore === "number" && item.rescueScore >= 50) {
+          accumulator[item.owner].atRiskDeals += 1;
+        }
+        if (item.taskStatus && item.taskStatus !== "NOT_CREATED") {
+          accumulator[item.owner].taskedDeals += 1;
+        }
+
+        return accumulator;
+      }, {})
+    ).sort((left, right) => right.atRiskDeals - left.atRiskDeals || right.taskedDeals - left.taskedDeals);
+
+    const metrics = {
+      analyzedDeals: overview.summary.analyzedDeals,
+      atRiskDeals: overview.summary.atRiskDeals,
+      criticalDeals: overview.summary.criticalDeals,
+      tasksCreated: Array.from(state.taskStates.values()).filter((taskState) => taskState.status !== "NOT_CREATED").length,
+      analysesRun: events.filter((event) => event.eventName === "deal_analysis_completed").length,
+      draftsGenerated: events.filter((event) => event.eventName === "draft_generated").length,
+      draftsBlocked: events.filter((event) => event.eventName === "draft_blocked").length,
+      touchedDeals: touchedDealIds.size,
+      queueCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithTask.length / atRiskQueue.length) * 100),
+      lastEventAt: events.length ? events[events.length - 1].occurredAt : null
+    };
+
+    const digest = [
+      `${metrics.atRiskDeals} at-risk deals detected, including ${metrics.criticalDeals} critical.`,
+      `${metrics.tasksCreated} local follow-up task(s) created with ${metrics.queueCoverageRate}% coverage on at-risk queue items.`,
+      `${metrics.draftsGenerated} draft(s) generated and ${metrics.draftsBlocked} blocked by guardrails.`
+    ];
+
+    return {
+      scenarioId,
+      metrics,
+      topReasons,
+      ownerBreakdown,
+      digest
+    };
+  }
+
   function exportState() {
     return {
       stateFilePath,
@@ -273,6 +352,7 @@ function createRuntime(fixtures, options = {}) {
     getScenarioCatalog,
     getOverview,
     getAnalysis,
+    getManagerReport,
     analyzeDeal,
     createTask,
     generateDraft,

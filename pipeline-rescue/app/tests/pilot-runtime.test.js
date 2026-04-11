@@ -86,3 +86,19 @@ test("resetScenario clears persisted local runtime state for that scenario", () 
   assert.equal(resetOverview.focusedDeal.taskState.status, "NOT_CREATED");
   assert.equal(resetOverview.pilotEvents.length, 0);
 });
+
+test("manager report summarizes coverage, reasons, and owner breakdown", () => {
+  const runtime = createTestRuntime();
+  runtime.analyzeDeal("critical-stalled", "DL-1001");
+  runtime.createTask("critical-stalled", "DL-1001");
+  runtime.generateDraft("critical-stalled", "DL-1001");
+
+  const report = runtime.getManagerReport("critical-stalled");
+
+  assert.equal(report.metrics.tasksCreated, 1);
+  assert.equal(report.metrics.analysesRun, 1);
+  assert.equal(report.metrics.draftsGenerated, 1);
+  assert.ok(report.metrics.queueCoverageRate > 0);
+  assert.equal(report.topReasons[0].reasonCode, "ACTIVITY_STALE");
+  assert.equal(report.ownerBreakdown[0].owner, "Sarah Lane");
+});

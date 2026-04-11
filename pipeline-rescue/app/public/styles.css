@@ -392,6 +392,33 @@ h1 {
   line-height: 1.6;
 }
 
+.manager-report {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.manager-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.manager-metric {
+  padding: 14px;
+  border: 1px solid rgba(131, 182, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(3, 8, 15, 0.45);
+}
+
+.manager-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .event-list {
   display: grid;
   gap: 12px;
@@ -448,6 +475,11 @@ h1 {
   }
 
   .verification-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-metrics,
+  .manager-columns {
     grid-template-columns: 1fr;
   }
 }

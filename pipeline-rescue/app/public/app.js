@@ -45,6 +45,10 @@ async function loadEvents() {
   return fetchJson(buildScenarioUrl("/api/events"));
 }
 
+async function loadManagerReport() {
+  return fetchJson(buildScenarioUrl("/api/manager/report"));
+}
+
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
@@ -211,6 +215,54 @@ function renderVerification(verification) {
   `;
 }
 
+function renderManagerReport(report) {
+  const metrics = report.metrics || {};
+  const topReasons = report.topReasons || [];
+  const ownerBreakdown = report.ownerBreakdown || [];
+  const digest = report.digest || [];
+
+  document.getElementById("manager-report").innerHTML = `
+    <div class="manager-metrics">
+      <article class="manager-metric">
+        <span class="score-label">Queue coverage</span>
+        <span class="verification-value">${metrics.queueCoverageRate ?? 0}%</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Tasks created</span>
+        <span class="verification-value">${metrics.tasksCreated ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Drafts blocked</span>
+        <span class="verification-value">${metrics.draftsBlocked ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Touched deals</span>
+        <span class="verification-value">${metrics.touchedDeals ?? 0}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Digest</p>
+      <ul class="verification-list">
+        ${digest.map((item) => `<li>${item}</li>`).join("")}
+      </ul>
+    </div>
+    <div class="manager-columns">
+      <div class="verification-block">
+        <p class="score-label">Top reasons</p>
+        <ul class="verification-list">
+          ${topReasons.map((item) => `<li>${item.reasonCode}: ${item.count}</li>`).join("") || "<li>No queue reasons yet.</li>"}
+        </ul>
+      </div>
+      <div class="verification-block">
+        <p class="score-label">Owner coverage</p>
+        <ul class="verification-list">
+          ${ownerBreakdown.map((item) => `<li>${item.owner}: ${item.atRiskDeals} at-risk, ${item.taskedDeals} tasked</li>`).join("") || "<li>No owner activity yet.</li>"}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
 function renderEvents(eventsPayload) {
   const events = eventsPayload.events || [];
   const eventList = document.getElementById("event-list");
@@ -279,6 +331,10 @@ async function refreshEvents() {
   renderEvents(await loadEvents());
 }
 
+async function refreshManagerReport() {
+  renderManagerReport(await loadManagerReport());
+}
+
 function applyOverview(catalog, scenarioId, overview) {
   appState.catalog = catalog;
   appState.scenarioId = scenarioId;
@@ -298,6 +354,7 @@ function applyOverview(catalog, scenarioId, overview) {
 async function renderScenario(catalog, scenarioId) {
   const overview = await loadOverview(scenarioId);
   applyOverview(catalog, scenarioId, overview);
+  await refreshManagerReport();
 }
 
 async function handleAnalyzeClick() {
@@ -305,6 +362,7 @@ async function handleAnalyzeClick() {
   renderVerification(payload.verification);
   renderFocusedDeal(payload.analysis);
   await refreshEvents();
+  await refreshManagerReport();
 }
 
 async function handleTaskClick() {
@@ -312,6 +370,7 @@ async function handleTaskClick() {
   renderFocusedDeal(payload.analysis);
   await refreshScenarioSummary();
   await refreshEvents();
+  await refreshManagerReport();
 }
 
 async function handleDraftClick() {
@@ -319,6 +378,7 @@ async function handleDraftClick() {
   renderVerification(payload.verification);
   renderFocusedDeal(payload.analysis);
   await refreshEvents();
+  await refreshManagerReport();
 }
 
 async function refreshScenarioSummary() {
@@ -331,6 +391,7 @@ async function refreshScenarioSummary() {
 async function handleResetClick() {
   const payload = await resetScenarioState();
   applyOverview(appState.catalog, appState.scenarioId, payload.overview);
+  await refreshManagerReport();
 }
 
 async function main() {
