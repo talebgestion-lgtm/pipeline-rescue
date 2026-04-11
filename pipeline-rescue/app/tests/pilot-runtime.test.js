@@ -100,6 +100,7 @@ test("recordFeedback persists recommendation feedback and decorates overview", (
   assert.equal(payload.feedbackState.operatorTrustScore, 100);
   assert.equal(payload.feedbackState.reasonCode, "ACCURATE_PRIORITY");
   assert.equal(payload.feedbackState.note, "Matched the field urgency.");
+  assert.equal(payload.feedbackState.themeCode, "PRIORITY_VALIDATED");
   assert.ok(payload.feedbackState.calibratedRecommendationScore >= payload.feedbackState.baseRecommendationScore);
   assert.equal(payload.analysis.feedbackState.status, "USEFUL");
   assert.equal(overview.focusedDeal.feedbackState.status, "USEFUL");
@@ -137,7 +138,7 @@ test("feedback report groups signals by reason and action", () => {
   });
   runtime.recordFeedback("critical-stalled", "DL-1002", "DISMISSED", {
     reasonCode: "WRONG_ACTION",
-    note: "Too aggressive for this account."
+    note: "Wrong action path for this account."
   });
   runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {
     reasonCode: "CLEAR_ACTION"
@@ -151,9 +152,12 @@ test("feedback report groups signals by reason and action", () => {
   assert.equal(report.metrics.trustScore, 67);
   assert.equal(report.metrics.notesCount, 2);
   assert.equal(report.byDismissReason[0].reasonCode, "WRONG_ACTION");
+  assert.equal(report.topFrictionPatterns[0].themeCode, "ACTION_MISMATCH");
+  assert.equal(report.metrics.topFrictionThemeLabel, "Action mismatch");
   assert.equal(report.recentEntries[0].dealId, "DL-1001");
   assert.ok(report.byReason[0].sampleSize >= 1);
   assert.ok(report.byAction[0].sampleSize >= 1);
+  assert.ok(report.byTheme.some((item) => item.themeCode === "ACTION_MISMATCH"));
 });
 
 test("feedback export returns json and csv payloads", () => {
@@ -168,7 +172,25 @@ test("feedback export returns json and csv payloads", () => {
 
   assert.equal(jsonPayload.metrics.totalEntries, 1);
   assert.equal(jsonPayload.entries[0].operatorReasonCode, "WEAK_EVIDENCE");
+  assert.equal(jsonPayload.entries[0].operatorThemeCode, "EVIDENCE_GAP");
   assert.match(csvPayload, /feedbackId,occurredAt,dealId/);
   assert.match(csvPayload, /WEAK_EVIDENCE/);
+  assert.match(csvPayload, /EVIDENCE_GAP/);
   assert.match(csvPayload, /The proof was too thin\./);
+});
+
+test("feedback note keyword classification detects top friction patterns", () => {
+  const runtime = createTestRuntime();
+  runtime.recordFeedback("critical-stalled", "DL-1002", "DISMISSED", {
+    note: "Field team says the email tone is too aggressive for this buyer."
+  });
+  runtime.recordFeedback("critical-stalled", "DL-1003", "DISMISSED", {
+    note: "Missing context on stakeholder history and account timing."
+  });
+
+  const report = runtime.getFeedbackReport("critical-stalled");
+
+  assert.equal(report.recentEntries[1].operatorThemeCode, "TONE_AGGRESSIVE");
+  assert.ok(report.byTheme.some((item) => item.themeCode === "TONE_AGGRESSIVE"));
+  assert.ok(report.topFrictionPatterns.some((item) => item.themeCode === "CONTEXT_GAP"));
 });

@@ -84,11 +84,13 @@ The UI now supports:
 - structured operator dismissal reason
 - free-text operator note
 - calibrated recommendation trust based on operator signal
+- deterministic note-to-theme classification for product friction analysis
 - recent feedback history per deal
 - queue-to-focus navigation
 - recent pilot event log
 - scenario reset
 - manager digest with coverage and owner breakdown
+- top friction patterns from dismissed field feedback
 
 ## Local state persistence
 
@@ -123,3 +125,9 @@ Feedback POST bodies can now include:
 
 - `reasonCode`
 - `note`
+
+Feedback reporting now also exposes:
+
+- classified operator themes
+- top friction patterns
+- enriched JSON and CSV exports with theme labels

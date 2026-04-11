@@ -27,6 +27,58 @@ function escapeCsv(value) {
   return text;
 }
 
+const FEEDBACK_THEME_LABELS = {
+  PRIORITY_VALIDATED: "Priority validated",
+  ACTION_CLARITY_VALIDATED: "Action clarity validated",
+  GUARDRAIL_VALIDATED: "Guardrail validated",
+  PRIORITY_MISMATCH: "Priority mismatch",
+  EVIDENCE_GAP: "Evidence gap",
+  ACTION_MISMATCH: "Action mismatch",
+  CONTEXT_GAP: "Context gap",
+  TONE_AGGRESSIVE: "Tone too aggressive",
+  TIMING_MISMATCH: "Timing mismatch",
+  UNCLASSIFIED: "Unclassified operator signal"
+};
+
+const REASON_CODE_THEME_MAP = {
+  ACCURATE_PRIORITY: "PRIORITY_VALIDATED",
+  CLEAR_ACTION: "ACTION_CLARITY_VALIDATED",
+  SAFE_GUARDRAIL: "GUARDRAIL_VALIDATED",
+  WRONG_PRIORITY: "PRIORITY_MISMATCH",
+  WEAK_EVIDENCE: "EVIDENCE_GAP",
+  WRONG_ACTION: "ACTION_MISMATCH",
+  MISSING_CONTEXT: "CONTEXT_GAP",
+  TOO_AGGRESSIVE: "TONE_AGGRESSIVE"
+};
+
+function classifyFeedbackTheme(status, reasonCode, note) {
+  const normalizedNote = String(note || "").toLowerCase();
+
+  const noteRules = [
+    { pattern: /(too aggressive|aggressive|pushy|hard sell|tone)/, themeCode: "TONE_AGGRESSIVE" },
+    { pattern: /(proof|evidence|too thin|unsupported|not enough signal)/, themeCode: "EVIDENCE_GAP" },
+    { pattern: /(missing context|context|stakeholder|history|account context|missing buyer)/, themeCode: "CONTEXT_GAP" },
+    { pattern: /(too early|too soon|later|not now|budget cycle|next quarter|timing)/, themeCode: "TIMING_MISMATCH" },
+    { pattern: /(wrong action|wrong step|email|call|meeting)/, themeCode: "ACTION_MISMATCH" },
+    { pattern: /(not urgent|low priority|wrong priority|priority)/, themeCode: "PRIORITY_MISMATCH" },
+    { pattern: /(clear action|clear next step)/, themeCode: "ACTION_CLARITY_VALIDATED" },
+    { pattern: /(accurate priority|right priority)/, themeCode: "PRIORITY_VALIDATED" },
+    { pattern: /(safe guardrail|guardrail)/, themeCode: "GUARDRAIL_VALIDATED" }
+  ];
+
+  const noteMatch = noteRules.find((rule) => rule.pattern.test(normalizedNote));
+  const themeCode = noteMatch
+    ? noteMatch.themeCode
+    : REASON_CODE_THEME_MAP[reasonCode]
+      || (status === "USEFUL" ? "ACTION_CLARITY_VALIDATED" : "UNCLASSIFIED");
+
+  return {
+    themeCode,
+    themeLabel: FEEDBACK_THEME_LABELS[themeCode] || FEEDBACK_THEME_LABELS.UNCLASSIFIED,
+    themeSource: noteMatch ? "note_keyword" : reasonCode ? "reason_code" : "fallback"
+  };
+}
+
 function toSerializableState(state) {
   return {
     sequence: state.sequence,
@@ -132,7 +184,10 @@ function createRuntime(fixtures, options = {}) {
       status: "NO_FEEDBACK",
       updatedAt: null,
       reasonCode: null,
-      note: null
+      note: null,
+      themeCode: null,
+      themeLabel: null,
+      themeSource: null
     };
   }
 
@@ -364,11 +419,15 @@ function createRuntime(fixtures, options = {}) {
     }
 
     const state = ensureScenarioState(scenarioId);
+    const theme = classifyFeedbackTheme(status, options.reasonCode, options.note);
     const feedbackState = {
       status,
       updatedAt: new Date().toISOString(),
       reasonCode: options.reasonCode || null,
-      note: options.note || null
+      note: options.note || null,
+      themeCode: theme.themeCode,
+      themeLabel: theme.themeLabel,
+      themeSource: theme.themeSource
     };
     const feedbackEntry = {
       feedbackId: `fb_${String(state.sequence).padStart(4, "0")}`,
@@ -384,7 +443,9 @@ function createRuntime(fixtures, options = {}) {
       rescueScore: analysis.analysis.rescueScore,
       validationStatus: analysis.verification.validationStatus,
       operatorReasonCode: feedbackState.reasonCode,
-      operatorNote: feedbackState.note
+      operatorNote: feedbackState.note,
+      operatorThemeCode: feedbackState.themeCode,
+      operatorThemeLabel: feedbackState.themeLabel
     };
 
     state.sequence += 1;
@@ -403,7 +464,8 @@ function createRuntime(fixtures, options = {}) {
         feedbackStatus: status,
         topReason: feedbackEntry.topReason,
         recommendedActionType: feedbackEntry.recommendedActionType,
-        operatorReasonCode: feedbackEntry.operatorReasonCode
+        operatorReasonCode: feedbackEntry.operatorReasonCode,
+        operatorThemeCode: feedbackEntry.operatorThemeCode
       }
     );
 
@@ -494,6 +556,7 @@ function createRuntime(fixtures, options = {}) {
       usefulFeedbackCount: feedbackReport.metrics.usefulCount,
       dismissedFeedbackCount: feedbackReport.metrics.dismissedCount,
       recommendationTrustScore: feedbackReport.metrics.trustScore,
+      topFrictionThemeLabel: feedbackReport.metrics.topFrictionThemeLabel,
       touchedDeals: touchedDealIds.size,
       queueCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithTask.length / atRiskQueue.length) * 100),
       feedbackCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithFeedback.length / atRiskQueue.length) * 100),
@@ -505,7 +568,10 @@ function createRuntime(fixtures, options = {}) {
       `${metrics.tasksCreated} local follow-up task(s) created with ${metrics.queueCoverageRate}% coverage on at-risk queue items.`,
       `${metrics.draftsGenerated} draft(s) generated and ${metrics.draftsBlocked} blocked by guardrails.`,
       `${metrics.usefulFeedbackCount} useful and ${metrics.dismissedFeedbackCount} dismissed recommendation signal(s), covering ${metrics.feedbackCoverageRate}% of at-risk deals.`,
-      `Operator trust score is ${metrics.recommendationTrustScore}/100 on the current feedback sample.`
+      `Operator trust score is ${metrics.recommendationTrustScore}/100 on the current feedback sample.`,
+      metrics.topFrictionThemeLabel
+        ? `Top friction pattern: ${metrics.topFrictionThemeLabel}.`
+        : "No dominant friction pattern has been observed yet."
     ];
 
     return {
@@ -558,6 +624,44 @@ function createRuntime(fixtures, options = {}) {
       ).sort((left, right) => right.sampleSize - left.sampleSize || right.trustScore - left.trustScore);
     }
 
+    const topFrictionPatterns = Object.values(
+      history
+        .filter((entry) => entry.status === "DISMISSED")
+        .reduce((accumulator, entry) => {
+          const themeCode = entry.operatorThemeCode || "UNCLASSIFIED";
+          if (!accumulator[themeCode]) {
+            accumulator[themeCode] = {
+              themeCode,
+              themeLabel: entry.operatorThemeLabel || FEEDBACK_THEME_LABELS[themeCode] || FEEDBACK_THEME_LABELS.UNCLASSIFIED,
+              count: 0,
+              uniqueDeals: new Set(),
+              latestOccurredAt: null,
+              sampleNote: null
+            };
+          }
+
+          accumulator[themeCode].count += 1;
+          accumulator[themeCode].uniqueDeals.add(entry.dealId);
+          if (!accumulator[themeCode].sampleNote && entry.operatorNote) {
+            accumulator[themeCode].sampleNote = entry.operatorNote;
+          }
+          if (!accumulator[themeCode].latestOccurredAt || entry.occurredAt > accumulator[themeCode].latestOccurredAt) {
+            accumulator[themeCode].latestOccurredAt = entry.occurredAt;
+          }
+
+          return accumulator;
+        }, {})
+    )
+      .map((item) => ({
+        themeCode: item.themeCode,
+        themeLabel: item.themeLabel,
+        count: item.count,
+        uniqueDeals: item.uniqueDeals.size,
+        latestOccurredAt: item.latestOccurredAt,
+        sampleNote: item.sampleNote
+      }))
+      .sort((left, right) => right.count - left.count || String(right.latestOccurredAt).localeCompare(String(left.latestOccurredAt)));
+
     return {
       scenarioId,
       metrics: {
@@ -568,16 +672,21 @@ function createRuntime(fixtures, options = {}) {
         uniqueDeals: new Set(history.map((entry) => entry.dealId)).size,
         notesCount: history.filter((entry) => entry.operatorNote).length,
         dismissedWithReasonCount: history.filter((entry) => entry.status === "DISMISSED" && entry.operatorReasonCode).length,
+        frictionEntriesCount: history.filter((entry) => entry.status === "DISMISSED" && entry.operatorThemeCode).length,
+        topFrictionTheme: topFrictionPatterns[0] ? topFrictionPatterns[0].themeCode : null,
+        topFrictionThemeLabel: topFrictionPatterns[0] ? topFrictionPatterns[0].themeLabel : null,
         lastFeedbackAt
       },
       byReason: groupBy("topReason", "reasonCode"),
       byAction: groupBy("recommendedActionType", "actionType"),
       byOwner: groupBy("owner", "owner"),
+      byTheme: groupBy("operatorThemeCode", "themeCode").filter((item) => item.themeCode !== "UNKNOWN"),
       byDismissReason: groupBy(
         "operatorReasonCode",
         "reasonCode",
         history.filter((entry) => entry.status === "DISMISSED")
       ).filter((item) => item.reasonCode !== "UNKNOWN"),
+      topFrictionPatterns,
       recentEntries: history.slice(-10).reverse()
     };
   }
@@ -597,6 +706,8 @@ function createRuntime(fixtures, options = {}) {
         "status",
         "operatorReasonCode",
         "operatorNote",
+        "operatorThemeCode",
+        "operatorThemeLabel",
         "topReason",
         "recommendedActionType",
         "rescueScore",
@@ -611,6 +722,8 @@ function createRuntime(fixtures, options = {}) {
         entry.status,
         entry.operatorReasonCode,
         entry.operatorNote,
+        entry.operatorThemeCode,
+        entry.operatorThemeLabel,
         entry.topReason,
         entry.recommendedActionType,
         entry.rescueScore,

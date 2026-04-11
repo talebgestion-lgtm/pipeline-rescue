@@ -184,6 +184,7 @@ function renderFeedbackState(feedbackState) {
       </article>
     </div>
     <p class="verification-note">${feedbackState?.reasonCode ? `Latest operator reason: ${feedbackState.reasonCode}.` : "No structured operator reason recorded yet."}</p>
+    <p class="verification-note">${feedbackState?.themeLabel ? `Detected theme: ${feedbackState.themeLabel}.` : "No classified operator theme yet."}</p>
     <p class="verification-note">${feedbackState?.note ? `Latest note: ${feedbackState.note}` : "No free-text note recorded yet."}</p>
   `;
 
@@ -350,7 +351,9 @@ function renderFeedbackReport(report) {
   const metrics = report.metrics || {};
   const byReason = report.byReason || [];
   const byAction = report.byAction || [];
+  const byTheme = report.byTheme || [];
   const byDismissReason = report.byDismissReason || [];
+  const topFrictionPatterns = report.topFrictionPatterns || [];
   const recentEntries = report.recentEntries || [];
 
   document.getElementById("feedback-report").innerHTML = `
@@ -375,6 +378,14 @@ function renderFeedbackReport(report) {
         <span class="score-label">Dismiss reasons</span>
         <span class="verification-value">${metrics.dismissedWithReasonCount ?? 0}</span>
       </article>
+      <article class="manager-metric">
+        <span class="score-label">Friction entries</span>
+        <span class="verification-value">${metrics.frictionEntriesCount ?? 0}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Top friction pattern</p>
+      <p class="verification-note">${metrics.topFrictionThemeLabel || "No dominant friction pattern yet."}</p>
     </div>
     <div class="manager-columns">
       <div class="verification-block">
@@ -391,15 +402,27 @@ function renderFeedbackReport(report) {
       </div>
     </div>
     <div class="verification-block">
+      <p class="score-label">Theme calibration</p>
+      <ul class="verification-list">
+        ${byTheme.slice(0, 5).map((item) => `<li>${item.themeCode}: ${item.usefulCount} useful, ${item.dismissedCount} dismissed, trust ${item.trustScore}/100</li>`).join("") || "<li>No classified theme yet.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
       <p class="score-label">Dismiss reasons</p>
       <ul class="verification-list">
         ${byDismissReason.slice(0, 5).map((item) => `<li>${item.reasonCode}: ${item.dismissedCount} dismissed, trust ${item.trustScore}/100</li>`).join("") || "<li>No dismissal reason captured yet.</li>"}
       </ul>
     </div>
     <div class="verification-block">
+      <p class="score-label">Top friction patterns</p>
+      <ul class="verification-list">
+        ${topFrictionPatterns.slice(0, 5).map((item) => `<li>${item.themeLabel}: ${item.count} dismissal(s), ${item.uniqueDeals} deal(s)${item.sampleNote ? `, sample "${item.sampleNote}"` : ""}</li>`).join("") || "<li>No friction pattern captured yet.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
       <p class="score-label">Recent signals</p>
       <ul class="verification-list">
-        ${recentEntries.slice(0, 5).map((item) => `<li>${item.dealName} | ${item.status} | ${item.topReason}${item.operatorReasonCode ? ` | ${item.operatorReasonCode}` : ""}${item.operatorNote ? ` | ${item.operatorNote}` : ""} | ${new Date(item.occurredAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No feedback signal captured yet.</li>"}
+        ${recentEntries.slice(0, 5).map((item) => `<li>${item.dealName} | ${item.status} | ${item.topReason}${item.operatorReasonCode ? ` | ${item.operatorReasonCode}` : ""}${item.operatorThemeLabel ? ` | ${item.operatorThemeLabel}` : ""}${item.operatorNote ? ` | ${item.operatorNote}` : ""} | ${new Date(item.occurredAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No feedback signal captured yet.</li>"}
       </ul>
     </div>
   `;
