@@ -2,10 +2,12 @@ const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { createRuntime } = require("./lib/pilot-runtime");
+const { createComplianceReport } = require("./lib/gdpr-compliance");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
 const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
+const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
 const port = Number(process.env.PORT || 4179);
 
 function sendJson(response, statusCode, payload) {
@@ -41,6 +43,10 @@ function readMockOverview() {
   return JSON.parse(fs.readFileSync(dataPath, "utf8"));
 }
 
+function readGdprConfig() {
+  return JSON.parse(fs.readFileSync(gdprConfigPath, "utf8"));
+}
+
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -70,7 +76,9 @@ function readJsonBody(request) {
 }
 
 const fixtures = readMockOverview();
+const gdprConfig = readGdprConfig();
 const runtime = createRuntime(fixtures);
+const complianceReport = createComplianceReport(gdprConfig);
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -217,6 +225,11 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/compliance/report") {
+      sendJson(response, 200, complianceReport);
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/feedback/export") {
       const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
       const payload = runtime.exportFeedback(scenarioId, format);
@@ -266,7 +279,7 @@ const server = http.createServer(async (request, response) => {
 
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
-    sendJson(response, error.message === "Invalid JSON body" ? 400 : 500, {
+    sendJson(response, error.statusCode || (error.message === "Invalid JSON body" ? 400 : 500), {
       error: error.message
     });
   }

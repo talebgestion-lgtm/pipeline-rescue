@@ -194,3 +194,19 @@ test("feedback note keyword classification detects top friction patterns", () =>
   assert.ok(report.byTheme.some((item) => item.themeCode === "TONE_AGGRESSIVE"));
   assert.ok(report.topFrictionPatterns.some((item) => item.themeCode === "CONTEXT_GAP"));
 });
+
+test("feedback note rejects direct identifiers and sensitive content", () => {
+  const runtime = createTestRuntime();
+
+  assert.throws(() => {
+    runtime.recordFeedback("critical-stalled", "DL-1001", "DISMISSED", {
+      note: "Contact me at maya@acme.example"
+    });
+  }, /direct email address/);
+
+  assert.throws(() => {
+    runtime.recordFeedback("critical-stalled", "DL-1001", "DISMISSED", {
+      note: "This note mentions health data."
+    });
+  }, /prohibited sensitive content/);
+});

@@ -6,6 +6,17 @@ const {
   buildDealAnalysis
 } = require("./analysis-engine");
 
+const ALLOWED_OPERATOR_REASON_CODES = new Set([
+  "ACCURATE_PRIORITY",
+  "CLEAR_ACTION",
+  "SAFE_GUARDRAIL",
+  "WRONG_PRIORITY",
+  "WEAK_EVIDENCE",
+  "WRONG_ACTION",
+  "MISSING_CONTEXT",
+  "TOO_AGGRESSIVE"
+]);
+
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -76,6 +87,45 @@ function classifyFeedbackTheme(status, reasonCode, note) {
     themeCode,
     themeLabel: FEEDBACK_THEME_LABELS[themeCode] || FEEDBACK_THEME_LABELS.UNCLASSIFIED,
     themeSource: noteMatch ? "note_keyword" : reasonCode ? "reason_code" : "fallback"
+  };
+}
+
+function createValidationError(message) {
+  const error = new Error(message);
+  error.statusCode = 400;
+  return error;
+}
+
+function validateFeedbackPayload(options = {}) {
+  const reasonCode = options.reasonCode || null;
+  const note = options.note ? String(options.note).trim() : null;
+
+  if (reasonCode && !ALLOWED_OPERATOR_REASON_CODES.has(reasonCode)) {
+    throw createValidationError("Unsupported operator reason code.");
+  }
+
+  if (note && note.length > 280) {
+    throw createValidationError("Operator note exceeds the 280-character GDPR-safe limit.");
+  }
+
+  if (note && /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(note)) {
+    throw createValidationError("Operator note must not contain a direct email address.");
+  }
+
+  if (note && /\+?\d[\d\s().-]{7,}\d/.test(note)) {
+    throw createValidationError("Operator note must not contain a direct phone number.");
+  }
+
+  if (
+    note
+    && /(health|medical|diagnosis|patient|therapy|religion|politic|union|biometric|genetic|sexual|pregnan|disabilit|santé|médical|diagnostic|patient|thérapie|religion|politique|syndicat|biométr|génétique|sexualit|grossesse|handicap)/i.test(note)
+  ) {
+    throw createValidationError("Operator note contains prohibited sensitive content for this product scope.");
+  }
+
+  return {
+    reasonCode,
+    note
   };
 }
 
@@ -412,6 +462,7 @@ function createRuntime(fixtures, options = {}) {
   }
 
   function recordFeedback(scenarioId, dealId, status, options = {}) {
+    const validatedOptions = validateFeedbackPayload(options);
     const analysis = getAnalysis(scenarioId, dealId);
 
     if (!analysis) {
@@ -419,12 +470,12 @@ function createRuntime(fixtures, options = {}) {
     }
 
     const state = ensureScenarioState(scenarioId);
-    const theme = classifyFeedbackTheme(status, options.reasonCode, options.note);
+    const theme = classifyFeedbackTheme(status, validatedOptions.reasonCode, validatedOptions.note);
     const feedbackState = {
       status,
       updatedAt: new Date().toISOString(),
-      reasonCode: options.reasonCode || null,
-      note: options.note || null,
+      reasonCode: validatedOptions.reasonCode,
+      note: validatedOptions.note,
       themeCode: theme.themeCode,
       themeLabel: theme.themeLabel,
       themeSource: theme.themeSource

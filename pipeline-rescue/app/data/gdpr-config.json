@@ -1,0 +1,115 @@
+{
+  "strictMode": true,
+  "productName": "Pipeline Rescue",
+  "roleModel": "PROCESSOR_AND_CONTROLLER",
+  "controller": {
+    "name": null,
+    "contactEmail": null,
+    "euEstablishmentCountry": null
+  },
+  "dpo": {
+    "required": false,
+    "designated": false,
+    "contactEmail": null,
+    "justification": "Reassess if activities become large-scale systematic monitoring or if sensitive data is introduced."
+  },
+  "specialCategoryData": {
+    "allowed": false,
+    "guardEnabled": true,
+    "justification": "Pipeline Rescue must not ingest Article 9 special-category data for its B2B sales-assist scope."
+  },
+  "processingActivities": [
+    {
+      "id": "deal_analysis",
+      "purpose": "Deal rescue scoring and prioritisation",
+      "lawfulBasis": null,
+      "legitimateInterestAssessmentCompleted": false,
+      "retentionDays": 365,
+      "usesProfiling": true,
+      "humanReviewRequired": true,
+      "producesLegalOrSimilarEffect": false
+    },
+    {
+      "id": "task_creation",
+      "purpose": "Task creation inside the CRM",
+      "lawfulBasis": null,
+      "legitimateInterestAssessmentCompleted": false,
+      "retentionDays": 365,
+      "usesProfiling": false,
+      "humanReviewRequired": true,
+      "producesLegalOrSimilarEffect": false
+    },
+    {
+      "id": "draft_generation",
+      "purpose": "Draft generation for sales follow-up",
+      "lawfulBasis": null,
+      "legitimateInterestAssessmentCompleted": false,
+      "retentionDays": 180,
+      "usesProfiling": true,
+      "humanReviewRequired": true,
+      "producesLegalOrSimilarEffect": false
+    },
+    {
+      "id": "feedback_capture",
+      "purpose": "Operator feedback for product quality",
+      "lawfulBasis": null,
+      "legitimateInterestAssessmentCompleted": false,
+      "retentionDays": 180,
+      "usesProfiling": false,
+      "humanReviewRequired": true,
+      "producesLegalOrSimilarEffect": false
+    }
+  ],
+  "processors": [
+    {
+      "name": "HubSpot",
+      "enabled": true,
+      "dpaSigned": false,
+      "hostingRegion": "UNCONFIRMED",
+      "transferMechanism": null
+    },
+    {
+      "name": "OpenAI",
+      "enabled": false,
+      "dpaSigned": false,
+      "hostingRegion": "UNCONFIRMED",
+      "transferMechanism": null
+    }
+  ],
+  "transfers": {
+    "usesThirdCountryTransfers": false,
+    "transferImpactAssessmentCompleted": false,
+    "adequacyOrSafeguardDocumented": false
+  },
+  "security": {
+    "encryptionAtRest": false,
+    "encryptionInTransit": true,
+    "rbac": false,
+    "mfa": false,
+    "auditLogs": true,
+    "backupRestoreTested": false
+  },
+  "dataSubjectRights": {
+    "requestChannelEmail": null,
+    "responseSlaDays": 30,
+    "identityVerificationProcedure": false,
+    "erasureWorkflow": false,
+    "portabilityWorkflow": false,
+    "objectionWorkflow": false
+  },
+  "breachResponse": {
+    "owner": null,
+    "runbookLinked": false,
+    "supervisoryNotificationWindowHours": 72
+  },
+  "records": {
+    "controllerRegisterMaintained": false,
+    "processorRegisterMaintained": false,
+    "lastReviewedOn": null
+  },
+  "dpia": {
+    "required": false,
+    "completed": false,
+    "justification": "Reassess if high-risk criteria are met before production."
+  }
+}

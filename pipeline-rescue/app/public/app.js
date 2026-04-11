@@ -55,6 +55,10 @@ async function loadFeedbackReport() {
   return fetchJson(buildScenarioUrl("/api/feedback/report"));
 }
 
+async function loadComplianceReport() {
+  return fetchJson("/api/compliance/report");
+}
+
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
@@ -428,6 +432,46 @@ function renderFeedbackReport(report) {
   `;
 }
 
+function renderComplianceReport(report) {
+  const blockers = report.blockers || [];
+  const checks = report.checks || [];
+
+  document.getElementById("compliance-report").innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Status</span>
+        <span class="verification-value">${report.status}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Strict mode</span>
+        <span class="verification-value">${report.strictMode ? "ENABLED" : "DISABLED"}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${report.summary}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Deployment blockers</p>
+      <ul class="verification-list">
+        ${blockers.map((item) => `<li>${item.label}: ${item.remediation}</li>`).join("") || "<li>No deployment blocker reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Control status</p>
+      <ul class="verification-list">
+        ${checks.map((item) => `<li>${item.status} | ${item.label}: ${item.evidence}</li>`).join("")}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Assumptions</p>
+      <ul class="verification-list">
+        ${(report.assumptions || []).map((item) => `<li>${item}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
 function renderEvents(eventsPayload) {
   const events = eventsPayload.events || [];
   const eventList = document.getElementById("event-list");
@@ -505,6 +549,10 @@ async function refreshFeedbackReport() {
   renderFeedbackReport(await loadFeedbackReport());
 }
 
+async function refreshComplianceReport() {
+  renderComplianceReport(await loadComplianceReport());
+}
+
 function getFeedbackPayload() {
   const reasonCode = document.getElementById("feedback-reason-select").value || null;
   const note = document.getElementById("feedback-note-input").value.trim() || null;
@@ -541,6 +589,7 @@ async function renderScenario(catalog, scenarioId) {
   applyOverview(catalog, scenarioId, overview);
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleAnalyzeClick() {
@@ -550,6 +599,7 @@ async function handleAnalyzeClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleTaskClick() {
@@ -559,6 +609,7 @@ async function handleTaskClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleDraftClick() {
@@ -568,6 +619,7 @@ async function handleDraftClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleFeedbackUsefulClick() {
@@ -581,6 +633,7 @@ async function handleFeedbackUsefulClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleFeedbackDismissClick() {
@@ -594,6 +647,7 @@ async function handleFeedbackDismissClick() {
   await refreshEvents();
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function handleFeedbackExportClick(format) {
@@ -612,6 +666,7 @@ async function handleResetClick() {
   applyOverview(appState.catalog, appState.scenarioId, payload.overview);
   await refreshManagerReport();
   await refreshFeedbackReport();
+  await refreshComplianceReport();
 }
 
 async function main() {

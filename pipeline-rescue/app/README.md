@@ -72,6 +72,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/feedback/report?scenario=critical-stalled`
 - `/api/feedback/export?scenario=critical-stalled&format=json`
 - `/api/feedback/export?scenario=critical-stalled&format=csv`
+- `/api/compliance/report`
 
 ## Interactive demo behavior
 
@@ -83,6 +84,7 @@ The UI now supports:
 - operator feedback capture (`useful` / `dismiss`)
 - structured operator dismissal reason
 - free-text operator note
+- GDPR-safe note entry guardrails
 - calibrated recommendation trust based on operator signal
 - deterministic note-to-theme classification for product friction analysis
 - recent feedback history per deal
@@ -91,6 +93,7 @@ The UI now supports:
 - scenario reset
 - manager digest with coverage and owner breakdown
 - top friction patterns from dismissed field feedback
+- a strict GDPR deployment gate report
 
 ## Local state persistence
 
@@ -131,3 +134,14 @@ Feedback reporting now also exposes:
 - classified operator themes
 - top friction patterns
 - enriched JSON and CSV exports with theme labels
+
+Compliance endpoint:
+
+- `GET /api/compliance/report`
+
+Operator notes are now intentionally constrained:
+
+- max 280 characters
+- no direct email addresses
+- no direct phone numbers
+- no obvious special-category data keywords

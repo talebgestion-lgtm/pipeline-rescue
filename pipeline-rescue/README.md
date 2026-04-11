@@ -44,6 +44,8 @@ Supporting specs:
 - `docs/icp.md`
 - `docs/pilot-instrumentation.md`
 - `docs/technical-architecture.md`
+- `docs/gdpr-strict-mode.md`
+- `docs/gdpr-record-template.md`
 
 ## Target customer
 
@@ -74,3 +76,4 @@ It now has:
 - technical architecture
 - starter executable demo with stress scenarios and a deterministic local engine
 - imported anti-memory and anti-hallucination guardrails translated into product rules
+- strict GDPR deployment gate and operational compliance template

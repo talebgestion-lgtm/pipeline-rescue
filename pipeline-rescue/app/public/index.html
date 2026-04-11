@@ -98,6 +98,7 @@
               </select>
               <label class="score-label" for="feedback-note-input">Operator note</label>
               <textarea id="feedback-note-input" class="feedback-note-input" rows="3" placeholder="Free-text field note for product analysis..."></textarea>
+              <p class="verification-note">Do not enter direct identifiers or sensitive personal data in this note.</p>
             </div>
             <div class="feedback-calibration" id="feedback-calibration"></div>
             <div class="feedback-history" id="feedback-history"></div>
@@ -132,6 +133,14 @@
             <button type="button" class="refresh-button" id="export-feedback-json-button">Export Feedback JSON</button>
             <button type="button" class="refresh-button secondary-button" id="export-feedback-csv-button">Export Feedback CSV</button>
           </div>
+
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">GDPR</p>
+              <h2>Compliance gate</h2>
+            </div>
+          </header>
+          <div class="verification-card" id="compliance-report"></div>
 
           <header class="panel-header">
             <div>
