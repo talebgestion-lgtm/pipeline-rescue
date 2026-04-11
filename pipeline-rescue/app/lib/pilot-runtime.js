@@ -14,6 +14,7 @@ function toSerializableState(state) {
   return {
     sequence: state.sequence,
     taskStates: Object.fromEntries(state.taskStates),
+    feedbackStates: Object.fromEntries(state.feedbackStates),
     events: state.events
   };
 }
@@ -22,6 +23,7 @@ function fromSerializableState(state) {
   return {
     sequence: state.sequence || 1,
     taskStates: new Map(Object.entries(state.taskStates || {})),
+    feedbackStates: new Map(Object.entries(state.feedbackStates || {})),
     events: Array.isArray(state.events) ? state.events : []
   };
 }
@@ -65,6 +67,7 @@ function createRuntime(fixtures, options = {}) {
       scenarioState.set(scenarioId, {
         sequence: 1,
         taskStates: new Map(),
+        feedbackStates: new Map(),
         events: []
       });
     }
@@ -103,9 +106,18 @@ function createRuntime(fixtures, options = {}) {
     };
   }
 
+  function getFeedbackStateForDeal(scenarioId, dealId) {
+    const state = ensureScenarioState(scenarioId);
+    return state.feedbackStates.get(dealId) || {
+      status: "NO_FEEDBACK",
+      updatedAt: null
+    };
+  }
+
   function decorateAnalysis(scenarioId, analysisPayload) {
     const payload = deepClone(analysisPayload);
     payload.analysis.taskState = getTaskStateForDeal(scenarioId, payload.analysis.dealId);
+    payload.analysis.feedbackState = getFeedbackStateForDeal(scenarioId, payload.analysis.dealId);
     return payload;
   }
 
@@ -114,9 +126,11 @@ function createRuntime(fixtures, options = {}) {
     const state = ensureScenarioState(scenarioId);
 
     payload.focusedDeal.taskState = getTaskStateForDeal(scenarioId, payload.focusedDeal.dealId);
+    payload.focusedDeal.feedbackState = getFeedbackStateForDeal(scenarioId, payload.focusedDeal.dealId);
     payload.queue = payload.queue.map((item) => ({
       ...item,
-      taskStatus: getTaskStateForDeal(scenarioId, item.dealId).status
+      taskStatus: getTaskStateForDeal(scenarioId, item.dealId).status,
+      feedbackStatus: getFeedbackStateForDeal(scenarioId, item.dealId).status
     }));
     payload.pilotEvents = state.events.slice(-8).reverse();
 
@@ -241,6 +255,33 @@ function createRuntime(fixtures, options = {}) {
     };
   }
 
+  function recordFeedback(scenarioId, dealId, status) {
+    const analysis = getAnalysis(scenarioId, dealId);
+
+    if (!analysis) {
+      return null;
+    }
+
+    const state = ensureScenarioState(scenarioId);
+    const feedbackState = {
+      status,
+      updatedAt: new Date().toISOString()
+    };
+
+    state.feedbackStates.set(dealId, feedbackState);
+    persistState();
+    createEvent(
+      scenarioId,
+      status === "USEFUL" ? "recommendation_marked_useful" : "recommendation_dismissed",
+      { dealId, feedbackStatus: status }
+    );
+
+    return {
+      feedbackState,
+      analysis: decorateAnalysis(scenarioId, analysis).analysis
+    };
+  }
+
   function getEvents(scenarioId) {
     const state = ensureScenarioState(scenarioId);
 
@@ -267,6 +308,7 @@ function createRuntime(fixtures, options = {}) {
     const queue = overview.queue || [];
     const atRiskQueue = queue.filter((item) => typeof item.rescueScore === "number" && item.rescueScore >= 50);
     const atRiskWithTask = atRiskQueue.filter((item) => item.taskStatus && item.taskStatus !== "NOT_CREATED");
+    const atRiskWithFeedback = atRiskQueue.filter((item) => item.feedbackStatus && item.feedbackStatus !== "NO_FEEDBACK");
 
     const topReasons = Object.entries(
       queue.reduce((accumulator, item) => {
@@ -285,7 +327,9 @@ function createRuntime(fixtures, options = {}) {
             owner: item.owner,
             queueDeals: 0,
             atRiskDeals: 0,
-            taskedDeals: 0
+            taskedDeals: 0,
+            usefulFeedback: 0,
+            dismissedFeedback: 0
           };
         }
 
@@ -295,6 +339,12 @@ function createRuntime(fixtures, options = {}) {
         }
         if (item.taskStatus && item.taskStatus !== "NOT_CREATED") {
           accumulator[item.owner].taskedDeals += 1;
+        }
+        if (item.feedbackStatus === "USEFUL") {
+          accumulator[item.owner].usefulFeedback += 1;
+        }
+        if (item.feedbackStatus === "DISMISSED") {
+          accumulator[item.owner].dismissedFeedback += 1;
         }
 
         return accumulator;
@@ -309,15 +359,19 @@ function createRuntime(fixtures, options = {}) {
       analysesRun: events.filter((event) => event.eventName === "deal_analysis_completed").length,
       draftsGenerated: events.filter((event) => event.eventName === "draft_generated").length,
       draftsBlocked: events.filter((event) => event.eventName === "draft_blocked").length,
+      usefulFeedbackCount: events.filter((event) => event.eventName === "recommendation_marked_useful").length,
+      dismissedFeedbackCount: events.filter((event) => event.eventName === "recommendation_dismissed").length,
       touchedDeals: touchedDealIds.size,
       queueCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithTask.length / atRiskQueue.length) * 100),
+      feedbackCoverageRate: atRiskQueue.length === 0 ? 0 : Math.round((atRiskWithFeedback.length / atRiskQueue.length) * 100),
       lastEventAt: events.length ? events[events.length - 1].occurredAt : null
     };
 
     const digest = [
       `${metrics.atRiskDeals} at-risk deals detected, including ${metrics.criticalDeals} critical.`,
       `${metrics.tasksCreated} local follow-up task(s) created with ${metrics.queueCoverageRate}% coverage on at-risk queue items.`,
-      `${metrics.draftsGenerated} draft(s) generated and ${metrics.draftsBlocked} blocked by guardrails.`
+      `${metrics.draftsGenerated} draft(s) generated and ${metrics.draftsBlocked} blocked by guardrails.`,
+      `${metrics.usefulFeedbackCount} useful and ${metrics.dismissedFeedbackCount} dismissed recommendation signal(s), covering ${metrics.feedbackCoverageRate}% of at-risk deals.`
     ];
 
     return {
@@ -356,6 +410,7 @@ function createRuntime(fixtures, options = {}) {
     analyzeDeal,
     createTask,
     generateDraft,
+    recordFeedback,
     getEvents,
     exportState,
     resetScenario

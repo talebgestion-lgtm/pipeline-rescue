@@ -77,6 +77,7 @@ The UI now supports:
 - manual analysis refresh
 - task creation with idempotent local state
 - draft generation checks
+- operator feedback capture (`useful` / `dismiss`)
 - queue-to-focus navigation
 - recent pilot event log
 - scenario reset
@@ -101,3 +102,8 @@ It is safe for demo use and can be reset from the UI or via:
 Manager reporting endpoint:
 
 - `GET /api/manager/report?scenario=critical-stalled`
+
+Feedback endpoints:
+
+- `POST /api/deals/DL-1001/feedback/useful?scenario=critical-stalled`
+- `POST /api/deals/DL-1001/feedback/dismiss?scenario=critical-stalled`

@@ -128,6 +128,17 @@ function renderTaskState(taskState) {
   value.textContent = `${taskState.status} ${taskState.taskId ? `| ${taskState.taskId}` : ""}`;
 }
 
+function renderFeedbackState(feedbackState) {
+  const value = document.getElementById("feedback-state-value");
+
+  if (!feedbackState || feedbackState.status === "NO_FEEDBACK") {
+    value.textContent = "No feedback yet";
+    return;
+  }
+
+  value.textContent = `${feedbackState.status} | ${new Date(feedbackState.updatedAt).toLocaleString("en-GB")}`;
+}
+
 function renderFocusedDeal(deal) {
   document.getElementById("deal-title").textContent = `${deal.dealName} | ${deal.owner}`;
   document.getElementById("score-value").textContent = formatScore(deal.rescueScore);
@@ -139,6 +150,7 @@ function renderFocusedDeal(deal) {
   pill.dataset.risk = deal.riskLevel || "UNKNOWN";
 
   renderTaskState(deal.taskState);
+  renderFeedbackState(deal.feedbackState);
 
   const reasonsList = document.getElementById("reasons-list");
   if (!deal.reasons || deal.reasons.length === 0) {
@@ -239,6 +251,14 @@ function renderManagerReport(report) {
         <span class="score-label">Touched deals</span>
         <span class="verification-value">${metrics.touchedDeals ?? 0}</span>
       </article>
+      <article class="manager-metric">
+        <span class="score-label">Useful feedback</span>
+        <span class="verification-value">${metrics.usefulFeedbackCount ?? 0}</span>
+      </article>
+      <article class="manager-metric">
+        <span class="score-label">Dismissed feedback</span>
+        <span class="verification-value">${metrics.dismissedFeedbackCount ?? 0}</span>
+      </article>
     </div>
     <div class="verification-block">
       <p class="score-label">Digest</p>
@@ -256,7 +276,7 @@ function renderManagerReport(report) {
       <div class="verification-block">
         <p class="score-label">Owner coverage</p>
         <ul class="verification-list">
-          ${ownerBreakdown.map((item) => `<li>${item.owner}: ${item.atRiskDeals} at-risk, ${item.taskedDeals} tasked</li>`).join("") || "<li>No owner activity yet.</li>"}
+          ${ownerBreakdown.map((item) => `<li>${item.owner}: ${item.atRiskDeals} at-risk, ${item.taskedDeals} tasked, ${item.usefulFeedback} useful, ${item.dismissedFeedback} dismissed</li>`).join("") || "<li>No owner activity yet.</li>"}
         </ul>
       </div>
     </div>
@@ -307,6 +327,7 @@ function renderQueue(queue) {
         <p class="queue-meta">${item.owner} | ${item.riskLevel} | score ${formatScore(item.rescueScore)}</p>
         <p class="queue-meta">Top reason: ${item.topReason}. Last activity ${item.lastActivityAgeDays ?? "unknown"} day(s) ago.</p>
         <p class="queue-meta">Task state: ${item.taskStatus || "NOT_CREATED"}</p>
+        <p class="queue-meta">Feedback: ${item.feedbackStatus || "NO_FEEDBACK"}</p>
         <p class="queue-action">${item.nextBestAction}</p>
         <button type="button" class="queue-open-button" data-deal-id="${item.dealId}">Open deal</button>
       </article>
@@ -381,6 +402,22 @@ async function handleDraftClick() {
   await refreshManagerReport();
 }
 
+async function handleFeedbackUsefulClick() {
+  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/useful`);
+  renderFocusedDeal(payload.analysis);
+  await refreshScenarioSummary();
+  await refreshEvents();
+  await refreshManagerReport();
+}
+
+async function handleFeedbackDismissClick() {
+  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/feedback/dismiss`);
+  renderFocusedDeal(payload.analysis);
+  await refreshScenarioSummary();
+  await refreshEvents();
+  await refreshManagerReport();
+}
+
 async function refreshScenarioSummary() {
   const overview = await loadOverview(appState.scenarioId);
   appState.overview = overview;
@@ -417,6 +454,8 @@ async function main() {
     document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
     document.getElementById("task-button").addEventListener("click", handleTaskClick);
     document.getElementById("draft-button").addEventListener("click", handleDraftClick);
+    document.getElementById("feedback-useful-button").addEventListener("click", handleFeedbackUsefulClick);
+    document.getElementById("feedback-dismiss-button").addEventListener("click", handleFeedbackDismissClick);
 
     queueList.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-deal-id]");

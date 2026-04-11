@@ -132,6 +132,40 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  const feedbackUsefulMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/feedback\/useful$/);
+  if (request.method === "POST" && feedbackUsefulMatch) {
+    const feedbackResult = runtime.recordFeedback(scenarioId, feedbackUsefulMatch[1], "USEFUL");
+
+    if (!feedbackResult) {
+      sendJson(response, 404, {
+        error: "Unknown feedback target",
+        scenarioId,
+        dealId: feedbackUsefulMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, feedbackResult);
+    return;
+  }
+
+  const feedbackDismissMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/feedback\/dismiss$/);
+  if (request.method === "POST" && feedbackDismissMatch) {
+    const feedbackResult = runtime.recordFeedback(scenarioId, feedbackDismissMatch[1], "DISMISSED");
+
+    if (!feedbackResult) {
+      sendJson(response, 404, {
+        error: "Unknown feedback target",
+        scenarioId,
+        dealId: feedbackDismissMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, feedbackResult);
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/events") {
     sendJson(response, 200, runtime.getEvents(scenarioId));
     return;

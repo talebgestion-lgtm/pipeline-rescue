@@ -87,17 +87,33 @@ test("resetScenario clears persisted local runtime state for that scenario", () 
   assert.equal(resetOverview.pilotEvents.length, 0);
 });
 
+test("recordFeedback persists recommendation feedback and decorates overview", () => {
+  const runtime = createTestRuntime();
+  const payload = runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+  const overview = runtime.getOverview("critical-stalled");
+
+  assert.equal(payload.feedbackState.status, "USEFUL");
+  assert.equal(payload.analysis.feedbackState.status, "USEFUL");
+  assert.equal(overview.focusedDeal.feedbackState.status, "USEFUL");
+  assert.equal(overview.queue[0].feedbackStatus, "USEFUL");
+});
+
 test("manager report summarizes coverage, reasons, and owner breakdown", () => {
   const runtime = createTestRuntime();
   runtime.analyzeDeal("critical-stalled", "DL-1001");
   runtime.createTask("critical-stalled", "DL-1001");
   runtime.generateDraft("critical-stalled", "DL-1001");
+  runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL");
+  runtime.recordFeedback("critical-stalled", "DL-1003", "DISMISSED");
 
   const report = runtime.getManagerReport("critical-stalled");
 
   assert.equal(report.metrics.tasksCreated, 1);
   assert.equal(report.metrics.analysesRun, 1);
   assert.equal(report.metrics.draftsGenerated, 1);
+  assert.equal(report.metrics.usefulFeedbackCount, 1);
+  assert.equal(report.metrics.dismissedFeedbackCount, 1);
+  assert.ok(report.metrics.feedbackCoverageRate > 0);
   assert.ok(report.metrics.queueCoverageRate > 0);
   assert.equal(report.topReasons[0].reasonCode, "ACTIVITY_STALE");
   assert.equal(report.ownerBreakdown[0].owner, "Sarah Lane");
