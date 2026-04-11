@@ -253,6 +253,38 @@ h1 {
   line-height: 1.6;
 }
 
+.action-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.action-button,
+.queue-open-button {
+  min-height: 44px;
+  border: 1px solid rgba(131, 182, 255, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(24, 48, 82, 0.88) 0%, rgba(10, 20, 35, 0.96) 100%);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.task-state-panel {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-state-value {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .stack {
   display: grid;
   gap: 12px;
@@ -351,6 +383,19 @@ h1 {
   line-height: 1.6;
 }
 
+.event-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.event-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .queue {
   display: grid;
   gap: 12px;
@@ -373,6 +418,11 @@ h1 {
   margin-top: 8px;
   color: var(--muted);
   line-height: 1.6;
+}
+
+.queue-open-button {
+  width: 100%;
+  margin-top: 12px;
 }
 
 .empty-card {

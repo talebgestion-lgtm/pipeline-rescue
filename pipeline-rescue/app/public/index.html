@@ -58,6 +58,17 @@
 
           <p class="deal-freshness" id="deal-freshness">Loading analysis freshness...</p>
 
+          <section class="action-bar">
+            <button type="button" class="action-button" id="analyze-button">Analyze now</button>
+            <button type="button" class="action-button" id="task-button">Create task</button>
+            <button type="button" class="action-button" id="draft-button">Generate draft</button>
+          </section>
+
+          <section class="task-state-panel" id="task-state-panel">
+            <p class="eyebrow">Task state</p>
+            <p class="task-state-value" id="task-state-value">Not created</p>
+          </section>
+
           <section class="stack" id="reasons-list"></section>
 
           <section class="draft-panel">
@@ -75,6 +86,14 @@
             </div>
           </header>
           <div class="verification-card" id="verification-card"></div>
+
+          <header class="panel-header">
+            <div>
+              <p class="eyebrow">Pilot events</p>
+              <h2>Recent activity</h2>
+            </div>
+          </header>
+          <div class="event-list" id="event-list"></div>
 
           <header class="panel-header">
             <div>

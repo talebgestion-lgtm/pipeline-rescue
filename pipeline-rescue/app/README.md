@@ -65,3 +65,17 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/scenarios`
 - `/api/overview?scenario=critical-stalled`
 - `/api/deals/DL-1001/analysis?scenario=critical-stalled`
+- `POST /api/deals/DL-1001/analyze?scenario=critical-stalled`
+- `POST /api/deals/DL-1001/tasks?scenario=critical-stalled`
+- `POST /api/deals/DL-1001/draft?scenario=critical-stalled`
+- `/api/events?scenario=critical-stalled`
+
+## Interactive demo behavior
+
+The UI now supports:
+
+- manual analysis refresh
+- task creation with idempotent local state
+- draft generation checks
+- queue-to-focus navigation
+- recent pilot event log

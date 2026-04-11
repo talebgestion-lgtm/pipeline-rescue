@@ -1,25 +1,48 @@
+const appState = {
+  catalog: null,
+  scenarioId: null,
+  overview: null,
+  focusedDealId: null
+};
+
 function getSearchScenario() {
   return new URLSearchParams(window.location.search).get("scenario");
 }
 
-async function loadScenarios() {
-  const response = await fetch("/api/scenarios");
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
 
   if (!response.ok) {
-    throw new Error("Failed to load scenario catalog");
+    throw new Error(`Request failed: ${response.status}`);
   }
 
   return response.json();
 }
 
+function buildScenarioUrl(path) {
+  return `${path}${path.includes("?") ? "&" : "?"}scenario=${encodeURIComponent(appState.scenarioId)}`;
+}
+
+async function loadScenarios() {
+  return fetchJson("/api/scenarios");
+}
+
 async function loadOverview(scenarioId) {
-  const response = await fetch(`/api/overview?scenario=${encodeURIComponent(scenarioId)}`);
+  return fetchJson(`/api/overview?scenario=${encodeURIComponent(scenarioId)}`);
+}
 
-  if (!response.ok) {
-    throw new Error("Failed to load overview");
-  }
+async function loadDealAnalysis(dealId) {
+  return fetchJson(buildScenarioUrl(`/api/deals/${encodeURIComponent(dealId)}/analysis`));
+}
 
-  return response.json();
+async function postAction(path) {
+  return fetchJson(buildScenarioUrl(path), {
+    method: "POST"
+  });
+}
+
+async function loadEvents() {
+  return fetchJson(buildScenarioUrl("/api/events"));
 }
 
 function formatCurrency(value) {
@@ -68,8 +91,7 @@ function renderSummary(summary) {
     { label: "Recovered revenue candidate", value: formatCurrency(summary.recoveredRevenueCandidate) }
   ];
 
-  const grid = document.getElementById("summary-grid");
-  grid.innerHTML = cards
+  document.getElementById("summary-grid").innerHTML = cards
     .map((card) => `
       <article class="summary-card">
         <span class="label">${card.label}</span>
@@ -77,6 +99,25 @@ function renderSummary(summary) {
       </article>
     `)
     .join("");
+}
+
+function renderMeta(meta) {
+  document.getElementById("meta-card").innerHTML = `
+    <p class="status-label">${meta.portalName}</p>
+    <p class="status-value">${meta.appName} ${meta.version}</p>
+    <p class="lede">${meta.scenarioLabel}</p>
+    <p class="lede">Snapshot generated at ${new Date(meta.generatedAt).toLocaleString("en-GB")}.</p>
+  `;
+}
+
+function renderTaskState(taskState) {
+  const value = document.getElementById("task-state-value");
+  if (!taskState || taskState.status === "NOT_CREATED") {
+    value.textContent = "Not created";
+    return;
+  }
+
+  value.textContent = `${taskState.status} ${taskState.taskId ? `| ${taskState.taskId}` : ""}`;
 }
 
 function renderFocusedDeal(deal) {
@@ -88,6 +129,8 @@ function renderFocusedDeal(deal) {
   const pill = document.getElementById("risk-pill");
   pill.textContent = deal.riskLevel || "UNKNOWN";
   pill.dataset.risk = deal.riskLevel || "UNKNOWN";
+
+  renderTaskState(deal.taskState);
 
   const reasonsList = document.getElementById("reasons-list");
   if (!deal.reasons || deal.reasons.length === 0) {
@@ -125,11 +168,10 @@ function renderFocusedDeal(deal) {
 }
 
 function renderVerification(verification) {
-  const card = document.getElementById("verification-card");
   const corrections = verification.correctionsApplied || [];
   const unverifiedFields = verification.unverifiedFields || [];
 
-  card.innerHTML = `
+  document.getElementById("verification-card").innerHTML = `
     <div class="verification-grid">
       <div class="verification-metric">
         <span class="score-label">Validation</span>
@@ -165,6 +207,30 @@ function renderVerification(verification) {
   `;
 }
 
+function renderEvents(eventsPayload) {
+  const events = eventsPayload.events || [];
+  const eventList = document.getElementById("event-list");
+
+  if (events.length === 0) {
+    eventList.innerHTML = `
+      <article class="event-card empty-card">
+        <p class="queue-meta">No pilot events yet. Trigger analyze, task creation, or draft generation.</p>
+      </article>
+    `;
+    return;
+  }
+
+  eventList.innerHTML = events
+    .map((event) => `
+      <article class="event-card">
+        <p class="eyebrow">${event.eventName}</p>
+        <p class="queue-meta">${new Date(event.occurredAt).toLocaleString("en-GB")}</p>
+        <p class="queue-meta">${Object.entries(event.properties || {}).map(([key, value]) => `${key}: ${value}`).join(" | ")}</p>
+      </article>
+    `)
+    .join("");
+}
+
 function renderQueue(queue) {
   const queueList = document.getElementById("queue-list");
 
@@ -184,20 +250,12 @@ function renderQueue(queue) {
         <h3>${item.dealName}</h3>
         <p class="queue-meta">${item.owner} | ${item.riskLevel} | score ${formatScore(item.rescueScore)}</p>
         <p class="queue-meta">Top reason: ${item.topReason}. Last activity ${item.lastActivityAgeDays ?? "unknown"} day(s) ago.</p>
+        <p class="queue-meta">Task state: ${item.taskStatus || "NOT_CREATED"}</p>
         <p class="queue-action">${item.nextBestAction}</p>
+        <button type="button" class="queue-open-button" data-deal-id="${item.dealId}">Open deal</button>
       </article>
     `)
     .join("");
-}
-
-function renderMeta(meta) {
-  const card = document.getElementById("meta-card");
-  card.innerHTML = `
-    <p class="status-label">${meta.portalName}</p>
-    <p class="status-value">${meta.appName} ${meta.version}</p>
-    <p class="lede">${meta.scenarioLabel}</p>
-    <p class="lede">Snapshot generated at ${new Date(meta.generatedAt).toLocaleString("en-GB")}.</p>
-  `;
 }
 
 function setScenarioInUrl(scenarioId) {
@@ -206,20 +264,66 @@ function setScenarioInUrl(scenarioId) {
   window.history.replaceState({}, "", url);
 }
 
+async function renderFocusedDealById(dealId) {
+  const payload = await loadDealAnalysis(dealId);
+  appState.focusedDealId = payload.analysis.dealId;
+  renderVerification(payload.verification);
+  renderFocusedDeal(payload.analysis);
+}
+
+async function refreshEvents() {
+  renderEvents(await loadEvents());
+}
+
 async function renderScenario(catalog, scenarioId) {
   const overview = await loadOverview(scenarioId);
+  appState.catalog = catalog;
+  appState.scenarioId = scenarioId;
+  appState.overview = overview;
+  appState.focusedDealId = overview.focusedDeal.dealId;
+
   renderScenarioControls(catalog, scenarioId);
   renderMeta(overview.meta);
   renderSummary(overview.summary);
   renderVerification(overview.verification);
   renderFocusedDeal(overview.focusedDeal);
   renderQueue(overview.queue);
+  renderEvents({ events: overview.pilotEvents || [] });
   setScenarioInUrl(scenarioId);
+}
+
+async function handleAnalyzeClick() {
+  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/analyze`);
+  renderVerification(payload.verification);
+  renderFocusedDeal(payload.analysis);
+  await refreshEvents();
+}
+
+async function handleTaskClick() {
+  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/tasks`);
+  renderFocusedDeal(payload.analysis);
+  await refreshScenarioSummary();
+  await refreshEvents();
+}
+
+async function handleDraftClick() {
+  const payload = await postAction(`/api/deals/${encodeURIComponent(appState.focusedDealId)}/draft`);
+  renderVerification(payload.verification);
+  renderFocusedDeal(payload.analysis);
+  await refreshEvents();
+}
+
+async function refreshScenarioSummary() {
+  const overview = await loadOverview(appState.scenarioId);
+  appState.overview = overview;
+  renderSummary(overview.summary);
+  renderQueue(overview.queue);
 }
 
 async function main() {
   const select = document.getElementById("scenario-select");
   const refreshButton = document.getElementById("refresh-button");
+  const queueList = document.getElementById("queue-list");
 
   try {
     const catalog = await loadScenarios();
@@ -233,10 +337,22 @@ async function main() {
       await renderScenario(catalog, select.value || initialScenario);
     });
 
+    document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
+    document.getElementById("task-button").addEventListener("click", handleTaskClick);
+    document.getElementById("draft-button").addEventListener("click", handleDraftClick);
+
+    queueList.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-deal-id]");
+      if (!button) {
+        return;
+      }
+
+      await renderFocusedDealById(button.dataset.dealId);
+    });
+
     await renderScenario(catalog, initialScenario);
   } catch (error) {
-    const card = document.getElementById("meta-card");
-    card.innerHTML = `
+    document.getElementById("meta-card").innerHTML = `
       <p class="status-label">Error</p>
       <p class="status-value">Starter data failed to load</p>
       <p class="lede">${error.message}</p>

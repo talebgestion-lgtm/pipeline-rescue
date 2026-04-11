@@ -1,11 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
-const {
-  buildScenarioCatalog,
-  buildOverview,
-  buildDealAnalysis
-} = require("./lib/analysis-engine");
+const { createRuntime } = require("./lib/pilot-runtime");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
@@ -40,28 +36,26 @@ function readMockOverview() {
   return JSON.parse(fs.readFileSync(dataPath, "utf8"));
 }
 
+const fixtures = readMockOverview();
+const runtime = createRuntime(fixtures);
+
 const server = http.createServer((request, response) => {
   const host = request.headers.host || `localhost:${port}`;
   const url = new URL(request.url, `http://${host}`);
-  const fixtures = readMockOverview();
+  const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
 
   if (url.pathname === "/api/scenarios") {
-    sendJson(response, 200, {
-      defaultScenario: fixtures.defaultScenario,
-      scenarios: buildScenarioCatalog(fixtures)
-    });
+    sendJson(response, 200, runtime.getScenarioCatalog());
     return;
   }
 
-  if (url.pathname === "/api/overview") {
-    const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
-    const overview = buildOverview(fixtures, scenarioId);
+  if (request.method === "GET" && url.pathname === "/api/overview") {
+    const overview = runtime.getOverview(scenarioId);
 
     if (!overview) {
       sendJson(response, 404, {
         error: "Unknown scenario",
-        scenarioId,
-        availableScenarios: buildScenarioCatalog(fixtures)
+        scenarioId
       });
       return;
     }
@@ -71,9 +65,8 @@ const server = http.createServer((request, response) => {
   }
 
   const analysisMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analysis$/);
-  if (analysisMatch) {
-    const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
-    const analysis = buildDealAnalysis(fixtures, scenarioId, analysisMatch[1]);
+  if (request.method === "GET" && analysisMatch) {
+    const analysis = runtime.getAnalysis(scenarioId, analysisMatch[1]);
 
     if (!analysis) {
       sendJson(response, 404, {
@@ -85,6 +78,62 @@ const server = http.createServer((request, response) => {
     }
 
     sendJson(response, 200, analysis);
+    return;
+  }
+
+  const analyzeMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analyze$/);
+  if (request.method === "POST" && analyzeMatch) {
+    const analysis = runtime.analyzeDeal(scenarioId, analyzeMatch[1]);
+
+    if (!analysis) {
+      sendJson(response, 404, {
+        error: "Unknown deal analysis",
+        scenarioId,
+        dealId: analyzeMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, analysis);
+    return;
+  }
+
+  const taskMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/tasks$/);
+  if (request.method === "POST" && taskMatch) {
+    const taskResult = runtime.createTask(scenarioId, taskMatch[1]);
+
+    if (!taskResult) {
+      sendJson(response, 404, {
+        error: "Unknown deal task target",
+        scenarioId,
+        dealId: taskMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, taskResult);
+    return;
+  }
+
+  const draftMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/draft$/);
+  if (request.method === "POST" && draftMatch) {
+    const draftResult = runtime.generateDraft(scenarioId, draftMatch[1]);
+
+    if (!draftResult) {
+      sendJson(response, 404, {
+        error: "Unknown draft target",
+        scenarioId,
+        dealId: draftMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, draftResult);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/events") {
+    sendJson(response, 200, runtime.getEvents(scenarioId));
     return;
   }
 
