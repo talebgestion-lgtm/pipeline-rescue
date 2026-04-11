@@ -3,3 +3,4 @@
 !README.md
 !pipeline-rescue/
 !pipeline-rescue/**
+pipeline-rescue/app/data/runtime-state.json

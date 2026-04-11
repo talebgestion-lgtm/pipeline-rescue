@@ -45,6 +45,10 @@ async function loadEvents() {
   return fetchJson(buildScenarioUrl("/api/events"));
 }
 
+async function resetScenarioState() {
+  return postAction("/api/runtime/reset");
+}
+
 function formatCurrency(value) {
   if (typeof value !== "number") {
     return "N/A";
@@ -275,8 +279,7 @@ async function refreshEvents() {
   renderEvents(await loadEvents());
 }
 
-async function renderScenario(catalog, scenarioId) {
-  const overview = await loadOverview(scenarioId);
+function applyOverview(catalog, scenarioId, overview) {
   appState.catalog = catalog;
   appState.scenarioId = scenarioId;
   appState.overview = overview;
@@ -290,6 +293,11 @@ async function renderScenario(catalog, scenarioId) {
   renderQueue(overview.queue);
   renderEvents({ events: overview.pilotEvents || [] });
   setScenarioInUrl(scenarioId);
+}
+
+async function renderScenario(catalog, scenarioId) {
+  const overview = await loadOverview(scenarioId);
+  applyOverview(catalog, scenarioId, overview);
 }
 
 async function handleAnalyzeClick() {
@@ -320,9 +328,15 @@ async function refreshScenarioSummary() {
   renderQueue(overview.queue);
 }
 
+async function handleResetClick() {
+  const payload = await resetScenarioState();
+  applyOverview(appState.catalog, appState.scenarioId, payload.overview);
+}
+
 async function main() {
   const select = document.getElementById("scenario-select");
   const refreshButton = document.getElementById("refresh-button");
+  const resetButton = document.getElementById("reset-button");
   const queueList = document.getElementById("queue-list");
 
   try {
@@ -336,6 +350,8 @@ async function main() {
     refreshButton.addEventListener("click", async () => {
       await renderScenario(catalog, select.value || initialScenario);
     });
+
+    resetButton.addEventListener("click", handleResetClick);
 
     document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
     document.getElementById("task-button").addEventListener("click", handleTaskClick);

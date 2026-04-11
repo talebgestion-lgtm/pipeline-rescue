@@ -1,3 +1,5 @@
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   buildScenarioCatalog,
   buildOverview,
@@ -8,8 +10,55 @@ function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-function createRuntime(fixtures) {
+function toSerializableState(state) {
+  return {
+    sequence: state.sequence,
+    taskStates: Object.fromEntries(state.taskStates),
+    events: state.events
+  };
+}
+
+function fromSerializableState(state) {
+  return {
+    sequence: state.sequence || 1,
+    taskStates: new Map(Object.entries(state.taskStates || {})),
+    events: Array.isArray(state.events) ? state.events : []
+  };
+}
+
+function createRuntime(fixtures, options = {}) {
+  const stateFilePath = options.stateFilePath || path.join(__dirname, "..", "data", "runtime-state.json");
   const scenarioState = new Map();
+
+  function persistState() {
+    const payload = {
+      version: 1,
+      scenarios: Object.fromEntries(
+        Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
+          scenarioId,
+          toSerializableState(state)
+        ])
+      )
+    };
+
+    fs.mkdirSync(path.dirname(stateFilePath), { recursive: true });
+    fs.writeFileSync(stateFilePath, JSON.stringify(payload, null, 2));
+  }
+
+  function loadState() {
+    if (!fs.existsSync(stateFilePath)) {
+      return;
+    }
+
+    const payload = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+    const scenarios = payload.scenarios || {};
+
+    for (const [scenarioId, state] of Object.entries(scenarios)) {
+      scenarioState.set(scenarioId, fromSerializableState(state));
+    }
+  }
+
+  loadState();
 
   function ensureScenarioState(scenarioId) {
     if (!scenarioState.has(scenarioId)) {
@@ -40,6 +89,7 @@ function createRuntime(fixtures) {
       state.events.shift();
     }
 
+    persistState();
     return event;
   }
 
@@ -134,6 +184,7 @@ function createRuntime(fixtures) {
         status: "ALREADY_EXISTS"
       };
       state.taskStates.set(dealId, taskState);
+      persistState();
       createEvent(scenarioId, "task_creation_skipped", {
         dealId,
         reason: "ALREADY_EXISTS"
@@ -153,6 +204,7 @@ function createRuntime(fixtures) {
     };
 
     state.taskStates.set(dealId, taskState);
+    persistState();
     createEvent(scenarioId, "task_created_from_recommendation", {
       dealId,
       taskId: taskState.taskId,
@@ -198,6 +250,25 @@ function createRuntime(fixtures) {
     };
   }
 
+  function exportState() {
+    return {
+      stateFilePath,
+      scenarios: Object.fromEntries(
+        Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
+          scenarioId,
+          toSerializableState(state)
+        ])
+      )
+    };
+  }
+
+  function resetScenario(scenarioId) {
+    scenarioState.delete(scenarioId);
+    persistState();
+
+    return getOverview(scenarioId);
+  }
+
   return {
     getScenarioCatalog,
     getOverview,
@@ -205,7 +276,9 @@ function createRuntime(fixtures) {
     analyzeDeal,
     createTask,
     generateDraft,
-    getEvents
+    getEvents,
+    exportState,
+    resetScenario
   };
 }
 

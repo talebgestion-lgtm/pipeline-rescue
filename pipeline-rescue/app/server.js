@@ -137,6 +137,20 @@ const server = http.createServer((request, response) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/runtime/export") {
+    sendJson(response, 200, runtime.exportState());
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/runtime/reset") {
+    const overview = runtime.resetScenario(scenarioId);
+    sendJson(response, 200, {
+      scenarioId,
+      overview
+    });
+    return;
+  }
+
   if (url.pathname === "/health") {
     sendJson(response, 200, { ok: true });
     return;

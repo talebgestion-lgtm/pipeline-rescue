@@ -115,6 +115,11 @@ h1 {
   margin-top: 20px;
 }
 
+.control-actions {
+  display: grid;
+  gap: 12px;
+}
+
 .scenario-card {
   padding: 18px 20px;
   border: 1px solid var(--line);
@@ -149,6 +154,10 @@ h1 {
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.secondary-button {
+  background: rgba(4, 10, 18, 0.92);
 }
 
 .summary-card {

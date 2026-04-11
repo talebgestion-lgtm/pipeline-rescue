@@ -79,3 +79,20 @@ The UI now supports:
 - draft generation checks
 - queue-to-focus navigation
 - recent pilot event log
+- scenario reset
+
+## Local state persistence
+
+The pilot runtime now persists local state in:
+
+- `data/runtime-state.json`
+
+This file stores:
+
+- created task state
+- recent pilot events
+
+It is safe for demo use and can be reset from the UI or via:
+
+- `POST /api/runtime/reset?scenario=critical-stalled`
+- `GET /api/runtime/export`
