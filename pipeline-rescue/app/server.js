@@ -1,10 +1,15 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const {
+  buildScenarioCatalog,
+  buildOverview,
+  buildDealAnalysis
+} = require("./lib/analysis-engine");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
-const dataPath = path.join(rootDir, "data", "mock-overview.json");
+const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
 const port = Number(process.env.PORT || 4179);
 
 function sendJson(response, statusCode, payload) {
@@ -35,14 +40,6 @@ function readMockOverview() {
   return JSON.parse(fs.readFileSync(dataPath, "utf8"));
 }
 
-function buildScenarioCatalog(fixtures) {
-  return Object.entries(fixtures.scenarios).map(([id, scenario]) => ({
-    id,
-    label: scenario.meta.scenarioLabel,
-    description: scenario.meta.scenarioDescription
-  }));
-}
-
 const server = http.createServer((request, response) => {
   const host = request.headers.host || `localhost:${port}`;
   const url = new URL(request.url, `http://${host}`);
@@ -58,9 +55,9 @@ const server = http.createServer((request, response) => {
 
   if (url.pathname === "/api/overview") {
     const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
-    const scenario = fixtures.scenarios[scenarioId];
+    const overview = buildOverview(fixtures, scenarioId);
 
-    if (!scenario) {
+    if (!overview) {
       sendJson(response, 404, {
         error: "Unknown scenario",
         scenarioId,
@@ -69,7 +66,25 @@ const server = http.createServer((request, response) => {
       return;
     }
 
-    sendJson(response, 200, scenario);
+    sendJson(response, 200, overview);
+    return;
+  }
+
+  const analysisMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analysis$/);
+  if (analysisMatch) {
+    const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
+    const analysis = buildDealAnalysis(fixtures, scenarioId, analysisMatch[1]);
+
+    if (!analysis) {
+      sendJson(response, 404, {
+        error: "Unknown deal analysis",
+        scenarioId,
+        dealId: analysisMatch[1]
+      });
+      return;
+    }
+
+    sendJson(response, 200, analysis);
     return;
   }
 

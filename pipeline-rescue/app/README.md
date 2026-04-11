@@ -5,7 +5,7 @@ This is a minimal executable starter for Pipeline Rescue.
 ## Purpose
 
 - provide a working local shell
-- render mocked analysis results
+- compute deterministic analysis results from scenario inputs
 - demonstrate score, reasons, next action, and queue behavior
 
 ## Run
@@ -31,9 +31,13 @@ It is intentionally:
 - deterministic
 - local-first
 
-The data comes from:
+The scenario inputs come from:
 
-- `data/mock-overview.json`
+- `data/scenario-inputs.json`
+
+The deterministic engine lives in:
+
+- `lib/analysis-engine.js`
 
 ## Stress scenarios
 
@@ -49,3 +53,9 @@ You can switch scenarios from the UI or use the query string:
 ```text
 http://localhost:4179/?scenario=draft-blocked
 ```
+
+## Local API
+
+- `/api/scenarios`
+- `/api/overview?scenario=critical-stalled`
+- `/api/deals/DL-1001/analysis?scenario=critical-stalled`

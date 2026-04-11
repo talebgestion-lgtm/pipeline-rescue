@@ -17,7 +17,7 @@ This repository contains the initial product foundation for **Pipeline Rescue**,
 - `pipeline-rescue/docs/pilot-instrumentation.md`: pilot metrics and events
 - `pipeline-rescue/docs/technical-architecture.md`: system architecture
 - `pipeline-rescue/docs/roadmap.md`: build and go-to-market roadmap
-- `pipeline-rescue/app/`: starter executable demo
+- `pipeline-rescue/app/`: starter executable demo with a deterministic local engine
 - `pipeline-rescue/site/`: static presentation page
 
 ## Positioning

@@ -1,0 +1,293 @@
+{
+  "defaultScenario": "critical-stalled",
+  "stageExpectationsDays": {
+    "discovery": 10,
+    "evaluation": 12,
+    "proposal": 14,
+    "negotiation": 7,
+    "renewal": 14
+  },
+  "scenarios": {
+    "critical-stalled": {
+      "portalName": "Acme Revenue Demo",
+      "scenarioLabel": "Critical stalled deal",
+      "scenarioDescription": "A severe rescue case with a credible draft and several deals competing for urgent attention.",
+      "guardrailHint": "Draft is allowed because the focused deal has enough verified evidence and a usable contact channel.",
+      "analysisTimestamp": "2026-04-11T08:00:00Z",
+      "focusDealId": "DL-1001",
+      "deals": [
+        {
+          "id": "DL-1001",
+          "name": "Acme Expansion",
+          "company": "Acme",
+          "owner": { "id": "OWN-1", "name": "Sarah Lane" },
+          "pipelineId": "default",
+          "stageId": "proposal",
+          "stageAgeDays": 32,
+          "amount": 48000,
+          "closeDate": "2026-05-10",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 19,
+          "hasNextStep": false,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-1", "name": "Maya Brooks", "email": "maya@acme.example", "decisionMaker": true }
+          ],
+          "engagedRescue": true
+        },
+        {
+          "id": "DL-1002",
+          "name": "Northwind Platform Upgrade",
+          "company": "Northwind",
+          "owner": { "id": "OWN-2", "name": "David Kerr" },
+          "pipelineId": "default",
+          "stageId": "negotiation",
+          "stageAgeDays": 18,
+          "amount": 36000,
+          "closeDate": "2026-05-18",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 11,
+          "hasNextStep": true,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-2", "name": "Elena Ford", "email": "elena@northwind.example", "decisionMaker": true },
+            { "id": "CT-3", "name": "Sam Birch", "email": "sam@northwind.example", "decisionMaker": false }
+          ],
+          "engagedRescue": true
+        },
+        {
+          "id": "DL-1003",
+          "name": "Helios Security Renewal",
+          "company": "Helios",
+          "owner": { "id": "OWN-3", "name": "Mina Patel" },
+          "pipelineId": "default",
+          "stageId": "evaluation",
+          "stageAgeDays": 13,
+          "amount": 15000,
+          "closeDate": "2026-05-21",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 9,
+          "hasNextStep": false,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-4", "name": "Ian Cole", "email": "ian@helios.example", "decisionMaker": false }
+          ],
+          "engagedRescue": false
+        },
+        {
+          "id": "DL-1004",
+          "name": "Orbit Analytics Expansion",
+          "company": "Orbit",
+          "owner": { "id": "OWN-4", "name": "Jade Fox" },
+          "pipelineId": "default",
+          "stageId": "discovery",
+          "stageAgeDays": 8,
+          "amount": 9000,
+          "closeDate": "2026-05-30",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 2,
+          "hasNextStep": true,
+          "hasFutureTask": true,
+          "contacts": [
+            { "id": "CT-5", "name": "Nina Vale", "email": "nina@orbit.example", "decisionMaker": true },
+            { "id": "CT-6", "name": "Tom Vale", "email": "tom@orbit.example", "decisionMaker": false }
+          ],
+          "engagedRescue": false
+        }
+      ]
+    },
+    "draft-blocked": {
+      "portalName": "Acme Revenue Demo",
+      "scenarioLabel": "Draft blocked by hygiene gap",
+      "scenarioDescription": "The score is still deterministic, but the AI layer must refuse a customer-facing draft.",
+      "guardrailHint": "This case exercises anti-hallucination behavior when the deterministic analysis is valid but the contact channel is not.",
+      "analysisTimestamp": "2026-04-11T08:05:00Z",
+      "focusDealId": "DL-2001",
+      "deals": [
+        {
+          "id": "DL-2001",
+          "name": "BlueOrbit Expansion",
+          "company": "BlueOrbit",
+          "owner": { "id": "OWN-5", "name": "Nora Chen" },
+          "pipelineId": "default",
+          "stageId": "proposal",
+          "stageAgeDays": 20,
+          "amount": 22000,
+          "closeDate": "2026-05-14",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 8,
+          "hasNextStep": false,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-7", "name": "Olivia Stone", "email": null, "decisionMaker": false }
+          ],
+          "engagedRescue": false
+        },
+        {
+          "id": "DL-2002",
+          "name": "Vertex Rollout",
+          "company": "Vertex",
+          "owner": { "id": "OWN-6", "name": "Leo Morris" },
+          "pipelineId": "default",
+          "stageId": "evaluation",
+          "stageAgeDays": 17,
+          "amount": 17000,
+          "closeDate": "2026-05-29",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 13,
+          "hasNextStep": true,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-8", "name": "Rina Hall", "email": "rina@vertex.example", "decisionMaker": false }
+          ],
+          "engagedRescue": false
+        },
+        {
+          "id": "DL-2003",
+          "name": "Atlas Renewal",
+          "company": "Atlas",
+          "owner": { "id": "OWN-7", "name": "Marco Hill" },
+          "pipelineId": "default",
+          "stageId": "renewal",
+          "stageAgeDays": 10,
+          "amount": 12000,
+          "closeDate": "2026-05-20",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 4,
+          "hasNextStep": true,
+          "hasFutureTask": true,
+          "contacts": [
+            { "id": "CT-9", "name": "Dina Lowe", "email": "dina@atlas.example", "decisionMaker": true }
+          ],
+          "engagedRescue": true
+        }
+      ]
+    },
+    "insufficient-data": {
+      "portalName": "Acme Revenue Demo",
+      "scenarioLabel": "Insufficient data",
+      "scenarioDescription": "The product must refuse false certainty when the minimum signal set is incomplete.",
+      "guardrailHint": "This is the anti-hallucination fail-safe: the system must not invent a numeric rescue score.",
+      "analysisTimestamp": "2026-04-11T08:10:00Z",
+      "focusDealId": "DL-3001",
+      "deals": [
+        {
+          "id": "DL-3001",
+          "name": "Nimbus Migration",
+          "company": "Nimbus",
+          "owner": { "id": "OWN-8", "name": "Owen Grant" },
+          "pipelineId": "default",
+          "stageId": "evaluation",
+          "stageAgeDays": null,
+          "amount": null,
+          "closeDate": "2026-06-05",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": null,
+          "hasNextStep": false,
+          "hasFutureTask": false,
+          "contacts": [],
+          "engagedRescue": false
+        },
+        {
+          "id": "DL-3002",
+          "name": "Boreal Upgrade",
+          "company": "Boreal",
+          "owner": { "id": "OWN-9", "name": "Pia Winters" },
+          "pipelineId": "default",
+          "stageId": "proposal",
+          "stageAgeDays": 16,
+          "amount": 26000,
+          "closeDate": "2026-05-22",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 12,
+          "hasNextStep": false,
+          "hasFutureTask": true,
+          "contacts": [
+            { "id": "CT-10", "name": "Milan Ross", "email": "milan@boreal.example", "decisionMaker": true }
+          ],
+          "engagedRescue": false
+        },
+        {
+          "id": "DL-3003",
+          "name": "Closed Legacy Deal",
+          "company": "Legacy",
+          "owner": { "id": "OWN-10", "name": "Tara Moss" },
+          "pipelineId": "default",
+          "stageId": "renewal",
+          "stageAgeDays": 5,
+          "amount": 8000,
+          "closeDate": "2026-04-01",
+          "archived": false,
+          "closedState": "WON",
+          "lastActivityAgeDays": 1,
+          "hasNextStep": true,
+          "hasFutureTask": false,
+          "contacts": [
+            { "id": "CT-11", "name": "Lena Park", "email": "lena@legacy.example", "decisionMaker": true }
+          ],
+          "engagedRescue": false
+        }
+      ]
+    },
+    "healthy-monitored": {
+      "portalName": "Acme Revenue Demo",
+      "scenarioLabel": "Healthy monitored deal",
+      "scenarioDescription": "Low-risk behavior with no fake urgency and no unnecessary escalation.",
+      "guardrailHint": "This case protects against false positives and operator fatigue.",
+      "analysisTimestamp": "2026-04-11T08:15:00Z",
+      "focusDealId": "DL-4001",
+      "deals": [
+        {
+          "id": "DL-4001",
+          "name": "Summit Renewal",
+          "company": "Summit",
+          "owner": { "id": "OWN-11", "name": "Jules Hart" },
+          "pipelineId": "default",
+          "stageId": "renewal",
+          "stageAgeDays": 7,
+          "amount": 12000,
+          "closeDate": "2026-05-28",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 2,
+          "hasNextStep": true,
+          "hasFutureTask": true,
+          "contacts": [
+            { "id": "CT-12", "name": "Clara West", "email": "clara@summit.example", "decisionMaker": true },
+            { "id": "CT-13", "name": "Noah West", "email": "noah@summit.example", "decisionMaker": false }
+          ],
+          "engagedRescue": true
+        },
+        {
+          "id": "DL-4002",
+          "name": "North Peak Trial",
+          "company": "North Peak",
+          "owner": { "id": "OWN-12", "name": "Eli Green" },
+          "pipelineId": "default",
+          "stageId": "discovery",
+          "stageAgeDays": 11,
+          "amount": 7000,
+          "closeDate": "2026-06-10",
+          "archived": false,
+          "closedState": "OPEN",
+          "lastActivityAgeDays": 6,
+          "hasNextStep": true,
+          "hasFutureTask": true,
+          "contacts": [
+            { "id": "CT-14", "name": "Iris Lane", "email": "iris@northpeak.example", "decisionMaker": true }
+          ],
+          "engagedRescue": false
+        }
+      ]
+    }
+  }
+}

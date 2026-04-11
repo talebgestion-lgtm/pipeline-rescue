@@ -72,5 +72,5 @@ It now has:
 - HubSpot data contract
 - pilot instrumentation model
 - technical architecture
-- starter executable demo with stress scenarios
+- starter executable demo with stress scenarios and a deterministic local engine
 - imported anti-memory and anti-hallucination guardrails translated into product rules
