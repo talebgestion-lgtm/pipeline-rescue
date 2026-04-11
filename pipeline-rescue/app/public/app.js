@@ -110,6 +110,15 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function formatScore(value) {
   return typeof value === "number" ? String(value) : "N/A";
 }
@@ -519,6 +528,106 @@ function renderComplianceConfig(config) {
   document.getElementById("compliance-config-input").value = JSON.stringify(config, null, 2);
 }
 
+function renderComplianceGuidedForm(config) {
+  const processors = Array.isArray(config.processors) ? config.processors : [];
+  const activities = Array.isArray(config.processingActivities) ? config.processingActivities : [];
+  const container = document.getElementById("compliance-guided-form");
+
+  container.innerHTML = `
+    <p class="score-label">Guided compliance form</p>
+    <label class="score-label" for="controller-name-input">Controller legal name</label>
+    <input id="controller-name-input" class="scenario-select" value="${escapeHtml(config.controller?.name || "")}">
+    <label class="score-label" for="controller-email-input">Privacy contact email</label>
+    <input id="controller-email-input" class="scenario-select" value="${escapeHtml(config.controller?.contactEmail || "")}">
+    <label class="score-label" for="controller-country-input">EU establishment country</label>
+    <input id="controller-country-input" class="scenario-select" value="${escapeHtml(config.controller?.euEstablishmentCountry || "")}">
+    <label class="score-label" for="dsar-email-input">DSAR channel email</label>
+    <input id="dsar-email-input" class="scenario-select" value="${escapeHtml(config.dataSubjectRights?.requestChannelEmail || "")}">
+    <label class="score-label" for="breach-owner-input">Breach owner</label>
+    <input id="breach-owner-input" class="scenario-select" value="${escapeHtml(config.breachResponse?.owner || "")}">
+    <div class="manager-columns">
+      <div class="verification-block">
+        <p class="score-label">Registers</p>
+        <label class="verification-note"><input type="checkbox" id="controller-register-input" ${config.records?.controllerRegisterMaintained ? "checked" : ""}> Controller register maintained</label>
+        <label class="verification-note"><input type="checkbox" id="processor-register-input" ${config.records?.processorRegisterMaintained ? "checked" : ""}> Processor register maintained</label>
+      </div>
+      <div class="verification-block">
+        <p class="score-label">Security</p>
+        <label class="verification-note"><input type="checkbox" id="security-at-rest-input" ${config.security?.encryptionAtRest ? "checked" : ""}> Encryption at rest</label>
+        <label class="verification-note"><input type="checkbox" id="security-rbac-input" ${config.security?.rbac ? "checked" : ""}> RBAC enabled</label>
+        <label class="verification-note"><input type="checkbox" id="security-mfa-input" ${config.security?.mfa ? "checked" : ""}> MFA enabled</label>
+        <label class="verification-note"><input type="checkbox" id="security-backup-input" ${config.security?.backupRestoreTested ? "checked" : ""}> Backup restore tested</label>
+      </div>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Processor DPAs</p>
+      ${(processors.map((processor, index) => `<label class="verification-note"><input type="checkbox" data-processor-index="${index}" ${processor.dpaSigned ? "checked" : ""}> ${escapeHtml(processor.name)} DPA signed</label>`).join("") || "<p class='verification-note'>No processor configured.</p>")}
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Lawful basis by activity</p>
+      <div class="stack">
+        ${activities.map((activity, index) => `
+          <article class="reason-card">
+            <div class="reason-row">
+              <span class="reason-title">${escapeHtml(activity.id)}</span>
+            </div>
+            <label class="score-label" for="activity-basis-${index}">Lawful basis</label>
+            <select id="activity-basis-${index}" class="scenario-select" data-activity-index="${index}">
+              <option value="">Select lawful basis</option>
+              <option value="CONSENT" ${activity.lawfulBasis === "CONSENT" ? "selected" : ""}>CONSENT</option>
+              <option value="CONTRACT" ${activity.lawfulBasis === "CONTRACT" ? "selected" : ""}>CONTRACT</option>
+              <option value="LEGAL_OBLIGATION" ${activity.lawfulBasis === "LEGAL_OBLIGATION" ? "selected" : ""}>LEGAL_OBLIGATION</option>
+              <option value="PUBLIC_TASK" ${activity.lawfulBasis === "PUBLIC_TASK" ? "selected" : ""}>PUBLIC_TASK</option>
+              <option value="VITAL_INTERESTS" ${activity.lawfulBasis === "VITAL_INTERESTS" ? "selected" : ""}>VITAL_INTERESTS</option>
+              <option value="LEGITIMATE_INTEREST" ${activity.lawfulBasis === "LEGITIMATE_INTEREST" ? "selected" : ""}>LEGITIMATE_INTEREST</option>
+            </select>
+            <label class="verification-note"><input type="checkbox" id="activity-lia-${index}" ${activity.legitimateInterestAssessmentCompleted ? "checked" : ""}> Legitimate-interest assessment completed</label>
+          </article>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function applyGuidedComplianceFormToJson() {
+  const config = JSON.parse(document.getElementById("compliance-config-input").value);
+  const nextConfig = JSON.parse(JSON.stringify(config));
+
+  nextConfig.controller = nextConfig.controller || {};
+  nextConfig.controller.name = document.getElementById("controller-name-input").value.trim() || null;
+  nextConfig.controller.contactEmail = document.getElementById("controller-email-input").value.trim() || null;
+  nextConfig.controller.euEstablishmentCountry = document.getElementById("controller-country-input").value.trim() || null;
+
+  nextConfig.dataSubjectRights = nextConfig.dataSubjectRights || {};
+  nextConfig.dataSubjectRights.requestChannelEmail = document.getElementById("dsar-email-input").value.trim() || null;
+
+  nextConfig.breachResponse = nextConfig.breachResponse || {};
+  nextConfig.breachResponse.owner = document.getElementById("breach-owner-input").value.trim() || null;
+
+  nextConfig.records = nextConfig.records || {};
+  nextConfig.records.controllerRegisterMaintained = document.getElementById("controller-register-input").checked;
+  nextConfig.records.processorRegisterMaintained = document.getElementById("processor-register-input").checked;
+
+  nextConfig.security = nextConfig.security || {};
+  nextConfig.security.encryptionAtRest = document.getElementById("security-at-rest-input").checked;
+  nextConfig.security.rbac = document.getElementById("security-rbac-input").checked;
+  nextConfig.security.mfa = document.getElementById("security-mfa-input").checked;
+  nextConfig.security.backupRestoreTested = document.getElementById("security-backup-input").checked;
+
+  nextConfig.processors = (nextConfig.processors || []).map((processor, index) => ({
+    ...processor,
+    dpaSigned: document.querySelector(`[data-processor-index="${index}"]`)?.checked || false
+  }));
+
+  nextConfig.processingActivities = (nextConfig.processingActivities || []).map((activity, index) => ({
+    ...activity,
+    lawfulBasis: document.getElementById(`activity-basis-${index}`).value || null,
+    legitimateInterestAssessmentCompleted: document.getElementById(`activity-lia-${index}`).checked
+  }));
+
+  renderComplianceConfig(nextConfig);
+}
+
 function renderEvents(eventsPayload) {
   const events = eventsPayload.events || [];
   const eventList = document.getElementById("event-list");
@@ -601,7 +710,9 @@ async function refreshComplianceReport() {
 }
 
 async function refreshComplianceConfig() {
-  renderComplianceConfig(await loadComplianceConfig());
+  const config = await loadComplianceConfig();
+  renderComplianceConfig(config);
+  renderComplianceGuidedForm(config);
 }
 
 async function refreshSystemReport() {
@@ -756,11 +867,22 @@ async function handleSaveComplianceConfigClick() {
     const payload = JSON.parse(raw);
     const response = await saveComplianceConfig(payload);
     renderComplianceConfig(response.config);
+    renderComplianceGuidedForm(response.config);
     renderComplianceReport(response.complianceReport);
     renderSystemReport(response.systemReport);
   } catch (error) {
     document.getElementById("compliance-report").innerHTML = `
       <p class="verification-note">Compliance config save failed: ${error.message}</p>
+    `;
+  }
+}
+
+function handleApplyGuidedComplianceClick() {
+  try {
+    applyGuidedComplianceFormToJson();
+  } catch (error) {
+    document.getElementById("compliance-report").innerHTML = `
+      <p class="verification-note">Guided form apply failed: ${error.message}</p>
     `;
   }
 }
@@ -774,6 +896,7 @@ async function main() {
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
   const reloadComplianceConfigButton = document.getElementById("reload-compliance-config-button");
   const saveComplianceConfigButton = document.getElementById("save-compliance-config-button");
+  const applyGuidedComplianceButton = document.getElementById("apply-guided-compliance-button");
 
   try {
     const catalog = await loadScenarios();
@@ -802,6 +925,7 @@ async function main() {
     });
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
+    applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
 
     queueList.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-deal-id]");
