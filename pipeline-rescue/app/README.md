@@ -73,6 +73,9 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/feedback/export?scenario=critical-stalled&format=json`
 - `/api/feedback/export?scenario=critical-stalled&format=csv`
 - `/api/compliance/report`
+- `/api/system/report`
+- `/health/live`
+- `/health/ready`
 
 ## Interactive demo behavior
 
@@ -88,12 +91,14 @@ The UI now supports:
 - calibrated recommendation trust based on operator signal
 - deterministic note-to-theme classification for product friction analysis
 - recent feedback history per deal
+- corrupt state recovery with archived backup
 - queue-to-focus navigation
 - recent pilot event log
 - scenario reset
 - manager digest with coverage and owner breakdown
 - top friction patterns from dismissed field feedback
 - a strict GDPR deployment gate report
+- a system diagnostics panel with readiness status
 
 ## Local state persistence
 
@@ -145,3 +150,8 @@ Operator notes are now intentionally constrained:
 - no direct email addresses
 - no direct phone numbers
 - no obvious special-category data keywords
+
+Runtime resilience:
+
+- atomic writes for the local runtime state file
+- automatic archive of corrupt state files before clean recovery

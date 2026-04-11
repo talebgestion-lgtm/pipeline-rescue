@@ -3,11 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
+const { createSystemReport } = require("./lib/system-report");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
 const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
 const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
+const packagePath = path.join(rootDir, "package.json");
 const port = Number(process.env.PORT || 4179);
 
 function sendJson(response, statusCode, payload) {
@@ -47,6 +49,10 @@ function readGdprConfig() {
   return JSON.parse(fs.readFileSync(gdprConfigPath, "utf8"));
 }
 
+function readPackageManifest() {
+  return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+}
+
 function readJsonBody(request) {
   return new Promise((resolve, reject) => {
     let raw = "";
@@ -75,24 +81,110 @@ function readJsonBody(request) {
   });
 }
 
-const fixtures = readMockOverview();
-const gdprConfig = readGdprConfig();
-const runtime = createRuntime(fixtures);
-const complianceReport = createComplianceReport(gdprConfig);
+function bootstrapApplication() {
+  const packageManifest = readPackageManifest();
+
+  try {
+    const fixtures = readMockOverview();
+    const runtime = createRuntime(fixtures);
+
+    return {
+      packageManifest,
+      fixtures,
+      runtime,
+      startupError: null
+    };
+  } catch (error) {
+    return {
+      packageManifest,
+      fixtures: null,
+      runtime: null,
+      startupError: error.message
+    };
+  }
+}
+
+function getGdprState() {
+  try {
+    const gdprConfig = readGdprConfig();
+    return {
+      gdprConfig,
+      complianceReport: createComplianceReport(gdprConfig),
+      error: null
+    };
+  } catch (error) {
+    return {
+      gdprConfig: null,
+      complianceReport: null,
+      error: error.message
+    };
+  }
+}
+
+function buildSystemState(appState) {
+  const gdprState = getGdprState();
+  const systemReport = createSystemReport({
+    packageManifest: appState.packageManifest,
+    fixtures: appState.fixtures,
+    gdprState,
+    runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
+    startupError: appState.startupError
+  });
+
+  return {
+    gdprState,
+    systemReport
+  };
+}
+
+function ensureRuntimeAvailable(appState, response) {
+  if (appState.runtime) {
+    return true;
+  }
+
+  sendJson(response, 503, {
+    error: "Application bootstrap failed",
+    detail: appState.startupError
+  });
+  return false;
+}
+
+const appState = bootstrapApplication();
 
 const server = http.createServer(async (request, response) => {
   try {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
-    const scenarioId = url.searchParams.get("scenario") || fixtures.defaultScenario;
+    const { gdprState, systemReport } = buildSystemState(appState);
+    const scenarioId = url.searchParams.get("scenario")
+      || (appState.fixtures ? appState.fixtures.defaultScenario : null);
+
+    if (url.pathname === "/health/live") {
+      sendJson(response, 200, { ok: true });
+      return;
+    }
+
+    if (url.pathname === "/health/ready") {
+      sendJson(response, systemReport.readiness ? 200 : 503, systemReport);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/system/report") {
+      sendJson(response, 200, systemReport);
+      return;
+    }
+
+    if (!ensureRuntimeAvailable(appState, response)) {
+      return;
+    }
 
     if (url.pathname === "/api/scenarios") {
-      sendJson(response, 200, runtime.getScenarioCatalog());
+      sendJson(response, 200, appState.runtime.getScenarioCatalog());
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/overview") {
-      const overview = runtime.getOverview(scenarioId);
+      const overview = appState.runtime.getOverview(scenarioId);
 
       if (!overview) {
         sendJson(response, 404, {
@@ -108,7 +200,7 @@ const server = http.createServer(async (request, response) => {
 
     const analysisMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analysis$/);
     if (request.method === "GET" && analysisMatch) {
-      const analysis = runtime.getAnalysis(scenarioId, analysisMatch[1]);
+      const analysis = appState.runtime.getAnalysis(scenarioId, analysisMatch[1]);
 
       if (!analysis) {
         sendJson(response, 404, {
@@ -125,7 +217,7 @@ const server = http.createServer(async (request, response) => {
 
     const analyzeMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analyze$/);
     if (request.method === "POST" && analyzeMatch) {
-      const analysis = runtime.analyzeDeal(scenarioId, analyzeMatch[1]);
+      const analysis = appState.runtime.analyzeDeal(scenarioId, analyzeMatch[1]);
 
       if (!analysis) {
         sendJson(response, 404, {
@@ -142,7 +234,7 @@ const server = http.createServer(async (request, response) => {
 
     const taskMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/tasks$/);
     if (request.method === "POST" && taskMatch) {
-      const taskResult = runtime.createTask(scenarioId, taskMatch[1]);
+      const taskResult = appState.runtime.createTask(scenarioId, taskMatch[1]);
 
       if (!taskResult) {
         sendJson(response, 404, {
@@ -159,7 +251,7 @@ const server = http.createServer(async (request, response) => {
 
     const draftMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/draft$/);
     if (request.method === "POST" && draftMatch) {
-      const draftResult = runtime.generateDraft(scenarioId, draftMatch[1]);
+      const draftResult = appState.runtime.generateDraft(scenarioId, draftMatch[1]);
 
       if (!draftResult) {
         sendJson(response, 404, {
@@ -177,7 +269,7 @@ const server = http.createServer(async (request, response) => {
     const feedbackUsefulMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/feedback\/useful$/);
     if (request.method === "POST" && feedbackUsefulMatch) {
       const body = await readJsonBody(request);
-      const feedbackResult = runtime.recordFeedback(scenarioId, feedbackUsefulMatch[1], "USEFUL", body);
+      const feedbackResult = appState.runtime.recordFeedback(scenarioId, feedbackUsefulMatch[1], "USEFUL", body);
 
       if (!feedbackResult) {
         sendJson(response, 404, {
@@ -195,7 +287,7 @@ const server = http.createServer(async (request, response) => {
     const feedbackDismissMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/feedback\/dismiss$/);
     if (request.method === "POST" && feedbackDismissMatch) {
       const body = await readJsonBody(request);
-      const feedbackResult = runtime.recordFeedback(scenarioId, feedbackDismissMatch[1], "DISMISSED", body);
+      const feedbackResult = appState.runtime.recordFeedback(scenarioId, feedbackDismissMatch[1], "DISMISSED", body);
 
       if (!feedbackResult) {
         sendJson(response, 404, {
@@ -211,28 +303,36 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/events") {
-      sendJson(response, 200, runtime.getEvents(scenarioId));
+      sendJson(response, 200, appState.runtime.getEvents(scenarioId));
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/manager/report") {
-      sendJson(response, 200, runtime.getManagerReport(scenarioId));
+      sendJson(response, 200, appState.runtime.getManagerReport(scenarioId));
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/feedback/report") {
-      sendJson(response, 200, runtime.getFeedbackReport(scenarioId));
+      sendJson(response, 200, appState.runtime.getFeedbackReport(scenarioId));
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/compliance/report") {
-      sendJson(response, 200, complianceReport);
+      if (gdprState.error) {
+        sendJson(response, 500, {
+          error: "GDPR configuration unavailable",
+          detail: gdprState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, gdprState.complianceReport);
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/feedback/export") {
       const format = url.searchParams.get("format") === "csv" ? "csv" : "json";
-      const payload = runtime.exportFeedback(scenarioId, format);
+      const payload = appState.runtime.exportFeedback(scenarioId, format);
 
       if (format === "csv") {
         sendText(response, 200, "text/csv; charset=utf-8", payload);
@@ -244,12 +344,12 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/runtime/export") {
-      sendJson(response, 200, runtime.exportState());
+      sendJson(response, 200, appState.runtime.exportState());
       return;
     }
 
     if (request.method === "POST" && url.pathname === "/api/runtime/reset") {
-      const overview = runtime.resetScenario(scenarioId);
+      const overview = appState.runtime.resetScenario(scenarioId);
       sendJson(response, 200, {
         scenarioId,
         overview
@@ -258,7 +358,7 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (url.pathname === "/health") {
-      sendJson(response, 200, { ok: true });
+      sendJson(response, 200, { ok: true, status: systemReport.status });
       return;
     }
 

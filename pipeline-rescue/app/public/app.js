@@ -59,6 +59,10 @@ async function loadComplianceReport() {
   return fetchJson("/api/compliance/report");
 }
 
+async function loadSystemReport() {
+  return fetchJson("/api/system/report");
+}
+
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
@@ -472,6 +476,33 @@ function renderComplianceReport(report) {
   `;
 }
 
+function renderSystemReport(report) {
+  document.getElementById("system-report").innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Status</span>
+        <span class="verification-value">${report.status}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Version</span>
+        <span class="verification-value">${report.version}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Warnings</p>
+      <ul class="verification-list">
+        ${(report.warnings || []).map((item) => `<li>${item}</li>`).join("") || "<li>No warning reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
 function renderEvents(eventsPayload) {
   const events = eventsPayload.events || [];
   const eventList = document.getElementById("event-list");
@@ -553,6 +584,10 @@ async function refreshComplianceReport() {
   renderComplianceReport(await loadComplianceReport());
 }
 
+async function refreshSystemReport() {
+  renderSystemReport(await loadSystemReport());
+}
+
 function getFeedbackPayload() {
   const reasonCode = document.getElementById("feedback-reason-select").value || null;
   const note = document.getElementById("feedback-note-input").value.trim() || null;
@@ -590,6 +625,7 @@ async function renderScenario(catalog, scenarioId) {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleAnalyzeClick() {
@@ -600,6 +636,7 @@ async function handleAnalyzeClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleTaskClick() {
@@ -610,6 +647,7 @@ async function handleTaskClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleDraftClick() {
@@ -620,6 +658,7 @@ async function handleDraftClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleFeedbackUsefulClick() {
@@ -634,6 +673,7 @@ async function handleFeedbackUsefulClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleFeedbackDismissClick() {
@@ -648,6 +688,7 @@ async function handleFeedbackDismissClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function handleFeedbackExportClick(format) {
@@ -667,6 +708,7 @@ async function handleResetClick() {
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshComplianceReport();
+  await refreshSystemReport();
 }
 
 async function main() {

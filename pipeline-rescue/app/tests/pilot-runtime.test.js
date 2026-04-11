@@ -87,6 +87,21 @@ test("resetScenario clears persisted local runtime state for that scenario", () 
   assert.equal(resetOverview.pilotEvents.length, 0);
 });
 
+test("runtime recovers from a corrupt persisted state file", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  fs.writeFileSync(stateFilePath, "{invalid-json");
+
+  const runtime = createRuntime(fixtures, { stateFilePath });
+  const diagnostics = runtime.getRuntimeDiagnostics();
+  const overview = runtime.getOverview("critical-stalled");
+
+  assert.equal(diagnostics.stateLoadRecovered, true);
+  assert.match(diagnostics.archivedCorruptStatePath, /\.corrupt-/);
+  assert.equal(fs.existsSync(diagnostics.archivedCorruptStatePath), true);
+  assert.equal(overview.focusedDeal.taskState.status, "NOT_CREATED");
+});
+
 test("recordFeedback persists recommendation feedback and decorates overview", () => {
   const runtime = createTestRuntime();
   const payload = runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {

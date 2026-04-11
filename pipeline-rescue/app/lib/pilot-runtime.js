@@ -118,6 +118,13 @@ function validateFeedbackPayload(options = {}) {
 
   if (
     note
+    && /(health|medical|diagnosis|patient|therapy|religion|politic|union|biometric|genetic|sexual|pregnan|disabilit|sante|medicale?|diagnostic|therapie|politique|syndicat|biometr|genetique|sexualite|grossesse|handicap)/i.test(note)
+  ) {
+    throw createValidationError("Operator note contains prohibited sensitive content for this product scope.");
+  }
+
+  if (
+    note
     && /(health|medical|diagnosis|patient|therapy|religion|politic|union|biometric|genetic|sexual|pregnan|disabilit|santé|médical|diagnostic|patient|thérapie|religion|politique|syndicat|biométr|génétique|sexualit|grossesse|handicap)/i.test(note)
   ) {
     throw createValidationError("Operator note contains prohibited sensitive content for this product scope.");
@@ -127,6 +134,13 @@ function validateFeedbackPayload(options = {}) {
     reasonCode,
     note
   };
+}
+
+function archiveCorruptFile(filePath, content) {
+  const archivedPath = `${filePath}.corrupt-${Date.now()}`;
+  fs.writeFileSync(archivedPath, content);
+  fs.unlinkSync(filePath);
+  return archivedPath;
 }
 
 function toSerializableState(state) {
@@ -152,6 +166,19 @@ function fromSerializableState(state) {
 function createRuntime(fixtures, options = {}) {
   const stateFilePath = options.stateFilePath || path.join(__dirname, "..", "data", "runtime-state.json");
   const scenarioState = new Map();
+  const runtimeDiagnostics = {
+    stateLoadRecovered: false,
+    archivedCorruptStatePath: null,
+    lastPersistAt: null,
+    lastPersistSucceeded: true
+  };
+
+  function writeJsonAtomic(filePath, payload) {
+    const tempFilePath = `${filePath}.tmp`;
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(tempFilePath, payload);
+    fs.renameSync(tempFilePath, filePath);
+  }
 
   function persistState() {
     const payload = {
@@ -164,8 +191,14 @@ function createRuntime(fixtures, options = {}) {
       )
     };
 
-    fs.mkdirSync(path.dirname(stateFilePath), { recursive: true });
-    fs.writeFileSync(stateFilePath, JSON.stringify(payload, null, 2));
+    try {
+      writeJsonAtomic(stateFilePath, JSON.stringify(payload, null, 2));
+      runtimeDiagnostics.lastPersistSucceeded = true;
+      runtimeDiagnostics.lastPersistAt = new Date().toISOString();
+    } catch (error) {
+      runtimeDiagnostics.lastPersistSucceeded = false;
+      throw error;
+    }
   }
 
   function loadState() {
@@ -173,11 +206,20 @@ function createRuntime(fixtures, options = {}) {
       return;
     }
 
-    const payload = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
-    const scenarios = payload.scenarios || {};
+    try {
+      const rawContent = fs.readFileSync(stateFilePath, "utf8");
+      const payload = JSON.parse(rawContent);
+      const scenarios = payload.scenarios || {};
 
-    for (const [scenarioId, state] of Object.entries(scenarios)) {
-      scenarioState.set(scenarioId, fromSerializableState(state));
+      for (const [scenarioId, state] of Object.entries(scenarios)) {
+        scenarioState.set(scenarioId, fromSerializableState(state));
+      }
+    } catch (error) {
+      runtimeDiagnostics.stateLoadRecovered = true;
+      runtimeDiagnostics.archivedCorruptStatePath = archiveCorruptFile(
+        stateFilePath,
+        fs.readFileSync(stateFilePath, "utf8")
+      );
     }
   }
 
@@ -795,6 +837,10 @@ function createRuntime(fixtures, options = {}) {
   function exportState() {
     return {
       stateFilePath,
+      runtimeDiagnostics: {
+        ...runtimeDiagnostics,
+        scenarioCount: scenarioState.size
+      },
       scenarios: Object.fromEntries(
         Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
           scenarioId,
@@ -811,12 +857,21 @@ function createRuntime(fixtures, options = {}) {
     return getOverview(scenarioId);
   }
 
+  function getRuntimeDiagnostics() {
+    return {
+      ...runtimeDiagnostics,
+      stateFilePath,
+      scenarioCount: scenarioState.size
+    };
+  }
+
   return {
     getScenarioCatalog,
     getOverview,
     getAnalysis,
     getManagerReport,
     getFeedbackReport,
+    getRuntimeDiagnostics,
     exportFeedback,
     analyzeDeal,
     createTask,
