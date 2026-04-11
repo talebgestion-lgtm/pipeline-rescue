@@ -5,6 +5,7 @@ const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
+const { createAiOperationsCycle } = require("./lib/ai-operations");
 
 const rootDir = __dirname;
 const publicDir = path.join(rootDir, "public");
@@ -404,6 +405,35 @@ const server = http.createServer(async (request, response) => {
         feedbackReport,
         complianceReport
       }));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/run-cycle") {
+      if (aiPolicyState.error) {
+        sendJson(response, 500, {
+          error: "AI policy unavailable",
+          detail: aiPolicyState.error
+        });
+        return;
+      }
+
+      const complianceReport = gdprState.complianceReport || createComplianceReport(readGdprConfig());
+      const cycleReport = createAiOperationsCycle({
+        runtime: appState.runtime,
+        scenarioId,
+        policy: aiPolicyState.aiPolicy,
+        complianceReport
+      });
+
+      if (!cycleReport) {
+        sendJson(response, 404, {
+          error: "Unknown scenario",
+          scenarioId
+        });
+        return;
+      }
+
+      sendJson(response, 200, cycleReport);
       return;
     }
 

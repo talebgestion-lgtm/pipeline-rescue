@@ -66,6 +66,12 @@ async function loadAiControlCenter() {
   return fetchJson(buildScenarioUrl("/api/ai/control-center"));
 }
 
+async function runAiCycle() {
+  return fetchJson(buildScenarioUrl("/api/ai/run-cycle"), {
+    method: "POST"
+  });
+}
+
 async function loadComplianceReport() {
   return fetchJson("/api/compliance/report");
 }
@@ -691,6 +697,56 @@ function renderAiPolicyForm(policy) {
   `;
 }
 
+function renderAiCycleReport(report) {
+  const container = document.getElementById("ai-cycle-report");
+
+  if (!report) {
+    container.innerHTML = `
+      <p class="score-label">AI cycle</p>
+      <p class="verification-note">No AI cycle has been run yet for this scenario.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Cycle status</span>
+        <span class="verification-value">${report.cycleStatus}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Control status</span>
+        <span class="verification-value">${report.controlStatus}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Analyzed</span>
+        <span class="verification-value">${report.metrics?.analyzedDeals ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Automated tasks</span>
+        <span class="verification-value">${report.metrics?.tasksCreated ?? 0}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${report.summary}</p>
+      <p class="verification-note">${report.controlSummary}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Manager digest</p>
+      <ul class="verification-list">
+        ${(report.managerDigest || []).map((item) => `<li>${item}</li>`).join("")}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Deal decisions</p>
+      <ul class="verification-list">
+        ${(report.decisions || []).map((item) => `<li>${item.dealName} | ${item.riskLevel} | task ${item.taskDecision} | draft ${item.draftDecision} | ${item.recommendedAction}</li>`).join("") || "<li>No deal selected for this cycle.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
 function collectAiPolicyForm() {
   const approvals = [];
   if (document.getElementById("ai-approval-drafts-input").checked) {
@@ -952,6 +1008,7 @@ function applyOverview(catalog, scenarioId, overview) {
 async function renderScenario(catalog, scenarioId) {
   const overview = await loadOverview(scenarioId);
   applyOverview(catalog, scenarioId, overview);
+  renderAiCycleReport(null);
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshAiControlCenter();
@@ -1083,6 +1140,23 @@ async function handleSaveAiPolicyClick() {
   }
 }
 
+async function handleRunAiCycleClick() {
+  try {
+    const report = await runAiCycle();
+    renderAiCycleReport(report);
+    await refreshScenarioSummary();
+    await refreshEvents();
+    await refreshManagerReport();
+    await refreshFeedbackReport();
+    await refreshAiControlCenter();
+    await refreshAiPolicy();
+  } catch (error) {
+    document.getElementById("ai-cycle-report").innerHTML = `
+      <p class="verification-note">AI cycle failed: ${error.message}</p>
+    `;
+  }
+}
+
 async function handleReloadComplianceConfigClick() {
   try {
     await refreshComplianceConfig();
@@ -1168,6 +1242,7 @@ async function main() {
   const installAppButton = document.getElementById("install-app-button");
   const reloadAiPolicyButton = document.getElementById("reload-ai-policy-button");
   const saveAiPolicyButton = document.getElementById("save-ai-policy-button");
+  const runAiCycleButton = document.getElementById("run-ai-cycle-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1215,6 +1290,7 @@ async function main() {
     exportCsvButton.addEventListener("click", async () => {
       await handleFeedbackExportClick("csv");
     });
+    runAiCycleButton.addEventListener("click", handleRunAiCycleClick);
     reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
     saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);

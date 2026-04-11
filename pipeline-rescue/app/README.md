@@ -87,6 +87,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/feedback/export?scenario=critical-stalled&format=csv`
 - `/api/ai/policy`
 - `/api/ai/control-center?scenario=critical-stalled`
+- `POST /api/ai/run-cycle?scenario=critical-stalled`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -114,6 +115,7 @@ The UI now supports:
 - manager digest with coverage and owner breakdown
 - top friction patterns from dismissed field feedback
 - an AI control center with local autonomy policy management
+- an executable AI cycle that analyzes the queue and automates only what policy allows
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -165,6 +167,7 @@ AI policy endpoints:
 - `GET /api/ai/policy`
 - `POST /api/ai/policy`
 - `GET /api/ai/control-center?scenario=critical-stalled`
+- `POST /api/ai/run-cycle?scenario=critical-stalled`
 
 Compliance endpoint:
 

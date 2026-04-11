@@ -78,5 +78,6 @@ It now has:
 - installable PWA shell for desktop/mobile pilots
 - portable Windows release packaging for field testing
 - local AI operations policy and autonomy control center
+- executable AI cycle with policy-gated actions
 - imported anti-memory and anti-hallucination guardrails translated into product rules
 - strict GDPR deployment gate and operational compliance template
