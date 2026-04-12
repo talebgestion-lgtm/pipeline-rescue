@@ -384,7 +384,70 @@ function normalizeTasks(records, referenceTimestamp) {
   });
 }
 
-function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisTimestamp }) {
+function formatOwnerDisplayName(ownerRecord, ownerId) {
+  if (!ownerRecord) {
+    return ownerId ? `Owner ${ownerId}` : "Unassigned";
+  }
+
+  const firstName = String(ownerRecord.firstName || "").trim();
+  const lastName = String(ownerRecord.lastName || "").trim();
+  const fullName = `${firstName} ${lastName}`.trim();
+  if (fullName) {
+    return fullName;
+  }
+
+  if (ownerRecord.email) {
+    return String(ownerRecord.email).trim();
+  }
+
+  return ownerId ? `Owner ${ownerId}` : "Unassigned";
+}
+
+async function loadOwnerRecord(liveSession, ownerId) {
+  if (!ownerId) {
+    return {
+      ownerRecord: null,
+      warning: null
+    };
+  }
+
+  try {
+    const ownerRecord = await liveSession.requestWithRefresh(`/crm/v3/owners/${encodeURIComponent(ownerId)}`);
+    return {
+      ownerRecord,
+      warning: null
+    };
+  } catch (error) {
+    if (error.statusCode === 404) {
+      try {
+        const ownerRecord = await liveSession.requestWithRefresh(`/crm/v3/owners/${encodeURIComponent(ownerId)}?archived=true`);
+        return {
+          ownerRecord,
+          warning: null
+        };
+      } catch (archivedError) {
+        return {
+          ownerRecord: null,
+          warning: `HubSpot owner ${ownerId} could not be resolved from the Owners API.`
+        };
+      }
+    }
+
+    if (error.statusCode === 403) {
+      return {
+        ownerRecord: null,
+        warning: `HubSpot owner ${ownerId} could not be resolved because the token lacks owner-read access.`
+      };
+    }
+
+    return {
+      ownerRecord: null,
+      warning: `HubSpot owner ${ownerId} resolution failed: ${error.detail || error.message}.`
+    };
+  }
+}
+
+function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisTimestamp, ownerRecord, ownerLookupWarning }) {
   const properties = dealRecord.properties || {};
   const stageId = properties.dealstage || null;
   const amount = toNumber(properties.amount);
@@ -413,6 +476,8 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
   }
   if (!ownerId) {
     normalizationWarnings.push("HubSpot owner ID is missing, so owner display is synthetic.");
+  } else if (ownerLookupWarning) {
+    normalizationWarnings.push(ownerLookupWarning);
   }
 
   const closedWon = toBoolean(properties.hs_is_closed_won) === true || /won/i.test(stageId || "");
@@ -424,7 +489,7 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
     company: companyName,
     owner: {
       id: ownerId || `owner-${dealRecord.id}`,
-      name: ownerId ? `Owner ${ownerId}` : "Unassigned"
+      name: formatOwnerDisplayName(ownerRecord, ownerId)
     },
     pipelineId: properties.pipeline || "default",
     stageId,
@@ -670,8 +735,12 @@ async function loadHubSpotDealData(options) {
       "createdate"
     ].join(","))}`
   );
+  const ownerId = dealRecord.properties && dealRecord.properties.hubspot_owner_id
+    ? String(dealRecord.properties.hubspot_owner_id)
+    : null;
 
-  const [contactAssociations, companyAssociations, taskAssociations] = await Promise.all([
+  const [ownerResolution, contactAssociations, companyAssociations, taskAssociations] = await Promise.all([
+    loadOwnerRecord(liveSession, ownerId),
     liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts`),
     liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/companies`),
     liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/tasks`)
@@ -716,7 +785,9 @@ async function loadHubSpotDealData(options) {
     contacts,
     companies,
     tasks,
-    analysisTimestamp: liveSession.analysisTimestamp
+    analysisTimestamp: liveSession.analysisTimestamp,
+    ownerRecord: ownerResolution.ownerRecord,
+    ownerLookupWarning: ownerResolution.warning
   });
 
   return {

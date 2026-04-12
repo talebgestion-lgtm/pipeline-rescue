@@ -69,6 +69,16 @@ test("loadHubSpotDealPreview normalizes a live HubSpot deal graph", async () => 
         });
       }
 
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/owners/44") {
+        return createJsonResponse(200, {
+          id: "44",
+          email: "owner@demo.hubspot.com",
+          firstName: "Maya",
+          lastName: "Manager",
+          archived: false
+        });
+      }
+
       if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/contacts") {
         return createJsonResponse(200, {
           results: [
@@ -157,6 +167,7 @@ test("loadHubSpotDealPreview normalizes a live HubSpot deal graph", async () => 
   assert.equal(preview.source.portalId, "123456");
   assert.equal(preview.normalizedDeal.name, "Acme Expansion");
   assert.equal(preview.normalizedDeal.company, "Acme");
+  assert.equal(preview.normalizedDeal.owner.name, "Maya Manager");
   assert.equal(preview.normalizedDeal.contacts[0].decisionMaker, true);
   assert.equal(preview.normalizedDeal.hasFutureTask, true);
   assert.equal(preview.normalizedDeal.lastActivityAgeDays, 19);
@@ -239,6 +250,16 @@ test("loadHubSpotDealPreview refreshes the access token when the stored token is
         });
       }
 
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/owners/44") {
+        return createJsonResponse(200, {
+          id: "44",
+          email: "owner@demo.hubspot.com",
+          firstName: "Fresh",
+          lastName: "Owner",
+          archived: false
+        });
+      }
+
       if (options.method === "GET" && parsedUrl.pathname.startsWith("/crm/v4/objects/deals/987/associations/")) {
         return createJsonResponse(200, { results: [] });
       }
@@ -254,6 +275,75 @@ test("loadHubSpotDealPreview refreshes the access token when the stored token is
   assert.equal(refreshed, true);
   assert.equal(preview.source.tokenRefreshed, true);
   assert.equal(preview.installState.installs[0].accessToken, "fresh_token");
+  assert.equal(preview.normalizedDeal.owner.name, "Fresh Owner");
+});
+
+test("loadHubSpotDealPreview falls back to synthetic owner when owner lookup is forbidden", async () => {
+  const preview = await loadHubSpotDealPreview({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          hubDomain: "demo.hubspot.com",
+          accessToken: "access_token",
+          refreshToken: "refresh_token",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    dealId: "987",
+    portalId: "123456",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    env: {
+      HUBSPOT_CLIENT_SECRET: "secret"
+    },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/objects/deals/987") {
+        return createJsonResponse(200, {
+          id: "987",
+          createdAt: "2026-03-01T10:00:00Z",
+          updatedAt: "2026-04-10T10:00:00Z",
+          archived: false,
+          properties: {
+            dealname: "Acme Expansion",
+            amount: "48000",
+            closedate: "2026-05-10",
+            dealstage: "proposal",
+            pipeline: "default",
+            hubspot_owner_id: "44",
+            hs_lastactivitydate: "2026-03-24T10:00:00Z"
+          }
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/owners/44") {
+        return {
+          ok: false,
+          status: 403,
+          json: async () => ({ message: "forbidden owner scope" })
+        };
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname.startsWith("/crm/v4/objects/deals/987/associations/")) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      if (options.method === "POST" && /\/crm\/v3\/objects\/(contacts|companies|tasks)\/batch\/read$/.test(parsedUrl.pathname)) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.equal(preview.normalizedDeal.owner.name, "Owner 44");
+  assert.match(
+    preview.normalizationWarnings.join(" "),
+    /lacks owner-read access/
+  );
 });
 
 test("searchHubSpotDeals posts deterministic CRM criteria and returns discovered IDs", async () => {
@@ -341,6 +431,16 @@ test("createHubSpotRescueTask writes an associated HubSpot task from live analys
           hs_next_step: "Confirm legal review",
           hs_lastactivitydate: "2026-03-24T10:00:00Z"
         }
+      });
+    }
+
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/owners/44") {
+      return createJsonResponse(200, {
+        id: "44",
+        email: "owner@demo.hubspot.com",
+        firstName: "Maya",
+        lastName: "Manager",
+        archived: false
       });
     }
 
