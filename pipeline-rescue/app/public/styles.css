@@ -332,6 +332,11 @@ h1 {
   resize: vertical;
 }
 
+.verification-note a {
+  color: var(--cyan);
+  word-break: break-all;
+}
+
 .feedback-calibration,
 .feedback-history,
 .feedback-report {

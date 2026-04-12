@@ -7,7 +7,8 @@ const appState = {
   serviceWorkerReady: false,
   installReady: false,
   providerProbe: null,
-  liveDraft: null
+  liveDraft: null,
+  hubspotLivePreview: null
 };
 
 function getSearchScenario() {
@@ -93,6 +94,11 @@ async function loadHubSpotStatus() {
 async function loadHubSpotInstallUrl(accountId) {
   const suffix = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
   return fetchJson(`/api/hubspot/install-url${suffix}`);
+}
+
+async function loadHubSpotLivePreview(portalId, dealId) {
+  const query = portalId ? `?portalId=${encodeURIComponent(portalId)}` : "";
+  return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}${query}`);
 }
 
 async function probeProvider() {
@@ -908,7 +914,76 @@ function renderHubSpotInstallOutput(payload) {
     <div class="verification-block">
       <p class="score-label">${escapeHtml(payload.title)}</p>
       <p class="verification-note">${escapeHtml(payload.message)}</p>
-      ${payload.url ? `<p class="verification-note">${escapeHtml(payload.url)}</p>` : ""}
+      ${payload.url ? `<p class="verification-note"><a href="${escapeHtml(payload.url)}" target="_blank" rel="noreferrer">${escapeHtml(payload.url)}</a></p>` : ""}
+    </div>
+  `;
+}
+
+function renderHubSpotLivePreview(preview) {
+  const container = document.getElementById("hubspot-live-preview");
+
+  if (!preview) {
+    container.innerHTML = `
+      <p class="score-label">Live preview</p>
+      <p class="verification-note">No live HubSpot deal preview loaded yet.</p>
+    `;
+    return;
+  }
+
+  const analysis = preview.dealAnalysis?.analysis || {};
+  const verification = preview.dealAnalysis?.verification || {};
+  const contacts = preview.graph?.contacts || [];
+  const tasks = preview.graph?.tasks || [];
+  const warnings = preview.normalizationWarnings || [];
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Portal</span>
+        <span class="verification-value">${escapeHtml(preview.source?.portalId || "unknown")}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Deal</span>
+        <span class="verification-value">${escapeHtml(analysis.dealId || preview.source?.dealId || "unknown")}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Rescue score</span>
+        <span class="verification-value">${formatScore(analysis.rescueScore)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Verification</span>
+        <span class="verification-value">${escapeHtml(verification.validationStatus || "UNKNOWN")}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${escapeHtml(preview.source?.hubDomain || "Unknown HubSpot portal")} | ${escapeHtml(analysis.dealName || preview.normalizedDeal?.name || "Unknown deal")} | ${escapeHtml(analysis.riskLevel || "UNKNOWN")}</p>
+      <p class="verification-note">${escapeHtml(analysis.recommendedAction?.summary || "No recommended action available.")}</p>
+      <p class="verification-note">${escapeHtml(preview.source?.tokenRefreshed ? "Access token was refreshed automatically for this live preview." : "Stored access token was used without refresh.")}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Normalization warnings</p>
+      <ul class="verification-list">
+        ${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No normalization warning reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Top reasons</p>
+      <ul class="verification-list">
+        ${(analysis.reasons || []).map((reason) => `<li>${escapeHtml(reason.label)} | ${escapeHtml(reason.evidence)}</li>`).join("") || "<li>No rescue reason available.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Contacts</p>
+      <ul class="verification-list">
+        ${contacts.map((contact) => `<li>${escapeHtml(contact.name)} | ${escapeHtml(contact.email || "no email")} | ${contact.decisionMaker ? "decision maker" : "standard contact"}</li>`).join("") || "<li>No associated contact returned.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Tasks</p>
+      <ul class="verification-list">
+        ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
+      </ul>
     </div>
   `;
 }
@@ -1270,6 +1345,8 @@ async function renderScenario(catalog, scenarioId) {
   applyOverview(catalog, scenarioId, overview);
   renderAiCycleReport(null);
   appState.liveDraft = null;
+  appState.hubspotLivePreview = null;
+  renderHubSpotLivePreview(null);
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshAiControlCenter();
@@ -1488,6 +1565,27 @@ async function handleExchangeHubSpotCodeClick() {
   }
 }
 
+async function handleHubSpotLivePreviewClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const dealId = document.getElementById("hubspot-live-deal-input").value.trim();
+
+    if (!dealId) {
+      throw new Error("A HubSpot deal ID is required for live preview.");
+    }
+
+    appState.hubspotLivePreview = await loadHubSpotLivePreview(portalId || "", dealId);
+    renderHubSpotLivePreview(appState.hubspotLivePreview);
+    await refreshHubSpot();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-preview").innerHTML = `
+      <p class="score-label">Live preview failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
 async function handleProbeAiProviderClick() {
   try {
     appState.providerProbe = await probeProvider();
@@ -1631,6 +1729,7 @@ async function main() {
   const reloadHubSpotConfigButton = document.getElementById("reload-hubspot-config-button");
   const saveHubSpotConfigButton = document.getElementById("save-hubspot-config-button");
   const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
+  const hubSpotLivePreviewButton = document.getElementById("hubspot-live-preview-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1689,6 +1788,7 @@ async function main() {
     reloadHubSpotConfigButton.addEventListener("click", handleReloadHubSpotConfigClick);
     saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
     exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
+    hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);

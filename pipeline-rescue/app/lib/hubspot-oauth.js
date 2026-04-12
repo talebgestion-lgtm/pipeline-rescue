@@ -4,6 +4,14 @@ function invalidHubSpotConfig(message) {
   return error;
 }
 
+function createExpiresAt(expiresIn, now = new Date()) {
+  if (!Number.isFinite(Number(expiresIn))) {
+    return null;
+  }
+
+  return new Date(now.getTime() + (Number(expiresIn) * 1000)).toISOString();
+}
+
 function validateHubSpotConfigPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     throw invalidHubSpotConfig("HubSpot config body must be a JSON object.");
@@ -238,6 +246,7 @@ async function exchangeHubSpotAuthCode({ config, code, env = process.env, fetchI
     accessToken: payload.access_token,
     refreshToken: payload.refresh_token,
     expiresIn: payload.expires_in,
+    expiresAt: createExpiresAt(payload.expires_in),
     tokenType: payload.token_type,
     scope: payload.scope || null,
     connectedAt: new Date().toISOString()

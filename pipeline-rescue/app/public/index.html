@@ -219,6 +219,26 @@
 
           <header class="panel-header">
             <div>
+              <p class="eyebrow">HubSpot</p>
+              <h2>Live deal preview</h2>
+            </div>
+          </header>
+          <div class="feedback-form">
+            <label class="score-label" for="hubspot-live-portal-input">Portal ID for live preview</label>
+            <input id="hubspot-live-portal-input" class="scenario-select" placeholder="Optional when one install is stored">
+            <label class="score-label" for="hubspot-live-deal-input">HubSpot deal ID</label>
+            <input id="hubspot-live-deal-input" class="scenario-select" placeholder="Required live HubSpot deal ID">
+          </div>
+          <div class="feedback-export-actions">
+            <button type="button" class="refresh-button" id="hubspot-live-preview-button">Load Live Deal Preview</button>
+          </div>
+          <div class="verification-card" id="hubspot-live-preview">
+            <p class="score-label">Live preview</p>
+            <p class="verification-note">No live HubSpot deal preview loaded yet.</p>
+          </div>
+
+          <header class="panel-header">
+            <div>
               <p class="eyebrow">GDPR</p>
               <h2>Compliance gate</h2>
             </div>

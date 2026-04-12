@@ -61,6 +61,7 @@ test("exchangeHubSpotAuthCode parses a successful token exchange response", asyn
 
   assert.equal(result.portalId, "123456");
   assert.equal(result.refreshToken, "refresh_token");
+  assert.match(result.expiresAt, /^20\d{2}-/);
 });
 
 test("validateHubSpotConfigPayload rejects a config without oauth scope", () => {

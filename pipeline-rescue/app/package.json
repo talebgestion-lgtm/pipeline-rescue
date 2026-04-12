@@ -1,6 +1,6 @@
 {
   "name": "pipeline-rescue-starter",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Deterministic executable starter for Pipeline Rescue",
   "scripts": {

@@ -1,6 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
@@ -16,6 +17,7 @@ const {
   validateHubSpotConfigPayload
 } = require("./lib/hubspot-oauth");
 const { loadEnvFile } = require("./lib/env-loader");
+const { loadHubSpotDealPreview } = require("./lib/hubspot-client");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
 const rootDir = __dirname;
@@ -47,6 +49,14 @@ function saveJsonAtomic(filePath, payload) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(tempFilePath, JSON.stringify(payload, null, 2));
   fs.renameSync(tempFilePath, filePath);
+}
+
+function stampMetaVersion(payload, version) {
+  if (payload && payload.meta && version) {
+    payload.meta.version = version;
+  }
+
+  return payload;
 }
 
 function sendFile(response, filePath, extraHeaders = {}) {
@@ -451,6 +461,64 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    const hubspotLiveDealMatch = url.pathname.match(/^\/api\/hubspot\/live\/deals\/([^/]+)$/);
+    if (request.method === "GET" && hubspotLiveDealMatch) {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live preview unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live preview unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const preview = await loadHubSpotDealPreview({
+        config: hubspotState.hubspotConfig,
+        installState: hubspotState.installState,
+        portalId: url.searchParams.get("portalId") || null,
+        dealId: hubspotLiveDealMatch[1],
+        analysisTimestamp: new Date().toISOString()
+      });
+
+      if (preview.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, preview.installState);
+      }
+
+      const liveFixtures = {
+        defaultScenario: "hubspot-live-preview",
+        stageExpectationsDays: appState.fixtures.stageExpectationsDays,
+        scenarios: {
+          "hubspot-live-preview": preview.scenario
+        }
+      };
+
+      const overview = stampMetaVersion(
+        buildOverview(liveFixtures, "hubspot-live-preview"),
+        appState.packageManifest.version
+      );
+      const dealAnalysis = stampMetaVersion(
+        buildDealAnalysis(liveFixtures, "hubspot-live-preview", preview.normalizedDeal.id),
+        appState.packageManifest.version
+      );
+
+      sendJson(response, 200, {
+        source: preview.source,
+        normalizedDeal: preview.normalizedDeal,
+        normalizationWarnings: preview.normalizationWarnings,
+        graph: preview.graph,
+        overview,
+        dealAnalysis
+      });
+      return;
+    }
+
     if (!ensureRuntimeAvailable(appState, response)) {
       return;
     }
@@ -461,7 +529,10 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "GET" && url.pathname === "/api/overview") {
-      const overview = appState.runtime.getOverview(scenarioId);
+      const overview = stampMetaVersion(
+        appState.runtime.getOverview(scenarioId),
+        appState.packageManifest.version
+      );
 
       if (!overview) {
         sendJson(response, 404, {
@@ -477,7 +548,10 @@ const server = http.createServer(async (request, response) => {
 
     const analysisMatch = url.pathname.match(/^\/api\/deals\/([^/]+)\/analysis$/);
     if (request.method === "GET" && analysisMatch) {
-      const analysis = appState.runtime.getAnalysis(scenarioId, analysisMatch[1]);
+      const analysis = stampMetaVersion(
+        appState.runtime.getAnalysis(scenarioId, analysisMatch[1]),
+        appState.packageManifest.version
+      );
 
       if (!analysis) {
         sendJson(response, 404, {
@@ -725,6 +799,7 @@ const server = http.createServer(async (request, response) => {
           packageManifest: appState.packageManifest,
           fixtures: appState.fixtures,
           gdprState: refreshedState,
+          hubspotState,
           runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
           startupError: appState.startupError
         })
@@ -888,7 +963,8 @@ const server = http.createServer(async (request, response) => {
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
     sendJson(response, error.statusCode || (error.message === "Invalid JSON body" ? 400 : 500), {
-      error: error.message
+      error: error.message,
+      ...(error.detail ? { detail: error.detail } : {})
     });
   }
 });
