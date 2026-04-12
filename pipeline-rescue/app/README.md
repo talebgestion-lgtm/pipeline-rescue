@@ -96,6 +96,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/hubspot/oauth/exchange`
 - `/api/hubspot/oauth/callback`
 - `/api/hubspot/live/deals/123456?portalId=999999`
+- `POST /api/hubspot/live/search`
 - `POST /api/hubspot/live/queue`
 - `POST /api/hubspot/live/deals/123456/tasks?portalId=999999`
 - `POST /api/hubspot/live/deals/123456/draft?portalId=999999`
@@ -132,6 +133,7 @@ The UI now supports:
 - a live provider probe and live-draft endpoint for the focused deal
 - a HubSpot OAuth config panel, install URL generator, and manual code exchange path
 - a live HubSpot deal preview path with token refresh and deterministic normalization
+- a live HubSpot criteria-discovery path to find stale deals without manually collecting IDs
 - a live HubSpot multi-deal queue path for manager-level rescue review
 - a live HubSpot task write path tied to the deterministic rescue recommendation
 - a live HubSpot draft path with provider-live or deterministic fallback
@@ -205,6 +207,7 @@ HubSpot endpoints:
 - `GET /api/hubspot/install-url`
 - `POST /api/hubspot/oauth/exchange`
 - `GET /api/hubspot/oauth/callback`
+- `POST /api/hubspot/live/search`
 - `POST /api/hubspot/live/queue`
 - `GET /api/hubspot/live/deals/:dealId?portalId=...`
 - `POST /api/hubspot/live/deals/:dealId/tasks?portalId=...`

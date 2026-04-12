@@ -230,10 +230,17 @@
             <input id="hubspot-live-deal-input" class="scenario-select" placeholder="Required live HubSpot deal ID">
             <label class="score-label" for="hubspot-live-queue-input">HubSpot deal IDs for live queue</label>
             <textarea id="hubspot-live-queue-input" class="feedback-note-input" rows="4" placeholder="One HubSpot deal ID per line, or comma-separated"></textarea>
+            <label class="score-label" for="hubspot-live-search-pipeline-input">HubSpot pipeline ID for criteria discovery</label>
+            <input id="hubspot-live-search-pipeline-input" class="scenario-select" placeholder="Optional pipeline filter">
+            <label class="score-label" for="hubspot-live-search-stale-days-input">Minimum last-activity age in days</label>
+            <input id="hubspot-live-search-stale-days-input" class="scenario-select" type="number" min="0" max="365" value="7">
+            <label class="score-label" for="hubspot-live-search-limit-input">Discovery limit</label>
+            <input id="hubspot-live-search-limit-input" class="scenario-select" type="number" min="1" max="25" value="5">
           </div>
           <div class="feedback-export-actions">
             <button type="button" class="refresh-button" id="hubspot-live-preview-button">Load Live Deal Preview</button>
             <button type="button" class="refresh-button" id="hubspot-live-queue-button">Load Live HubSpot Queue</button>
+            <button type="button" class="refresh-button" id="hubspot-live-search-button">Discover Live Queue By Criteria</button>
             <button type="button" class="refresh-button" id="hubspot-live-draft-button">Generate Live HubSpot Draft</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-task-button">Create Live HubSpot Task</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-note-button">Save Draft As HubSpot Note</button>

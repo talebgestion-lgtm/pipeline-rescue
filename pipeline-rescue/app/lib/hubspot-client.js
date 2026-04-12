@@ -3,6 +3,7 @@ const {
   normalizeInstallState,
   validateHubSpotConfigPayload
 } = require("./hubspot-oauth");
+const { buildHubSpotDealSearchRequest } = require("./hubspot-live-search");
 
 function createHubSpotClientError(message, statusCode = 500, detail = null) {
   const error = new Error(message);
@@ -743,6 +744,36 @@ async function loadHubSpotDealPreview(options) {
   });
 }
 
+async function searchHubSpotDeals(options) {
+  const liveSession = await createLiveRequestSession(options);
+  const criteria = options.criteria || {};
+  const searchRequest = buildHubSpotDealSearchRequest(criteria, liveSession.analysisTimestamp);
+  const searchResult = await liveSession.requestWithRefresh(
+    "/crm/v3/objects/deals/search",
+    "POST",
+    searchRequest
+  );
+  const dealIds = Array.from(new Set(
+    (Array.isArray(searchResult && searchResult.results) ? searchResult.results : [])
+      .map((item) => String(item && item.id ? item.id : "").trim())
+      .filter(Boolean)
+  ));
+
+  return {
+    criteria,
+    searchRequest,
+    dealIds,
+    source: {
+      portalId: String(liveSession.getInstall().portalId),
+      hubDomain: liveSession.getInstall().hubDomain || null,
+      fetchedAt: liveSession.analysisTimestamp,
+      tokenRefreshed: liveSession.getTokenRefreshed(),
+      dealCount: dealIds.length
+    },
+    installState: liveSession.getInstallState()
+  };
+}
+
 async function createHubSpotRescueTask(options) {
   const liveSession = await createLiveRequestSession(options);
   const preview = options.preview;
@@ -859,5 +890,6 @@ async function createHubSpotDraftNote(options) {
 module.exports = {
   createHubSpotDraftNote,
   createHubSpotRescueTask,
-  loadHubSpotDealPreview
+  loadHubSpotDealPreview,
+  searchHubSpotDeals
 };

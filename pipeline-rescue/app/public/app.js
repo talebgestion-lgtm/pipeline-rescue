@@ -134,6 +134,14 @@ async function loadHubSpotLiveQueue(portalId, dealIds) {
   });
 }
 
+async function loadHubSpotLiveSearch(criteria) {
+  return fetchJson("/api/hubspot/live/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(criteria)
+  });
+}
+
 async function probeProvider() {
   return fetchJson("/api/ai/provider-probe", {
     method: "POST"
@@ -1068,8 +1076,23 @@ function renderHubSpotLiveQueue(payload) {
   const summary = payload.overview?.summary || {};
   const queue = payload.overview?.queue || [];
   const digest = payload.managerDigest || [];
+  const discoveredDealIds = payload.discoveredDealIds || [];
+  const criteria = payload.criteria || null;
+  const criteriaSummary = criteria
+    ? [
+      `stale >= ${criteria.minimumLastActivityAgeDays ?? 0} day(s)`,
+      `limit ${criteria.limit ?? 0}`,
+      criteria.pipelineId ? `pipeline ${criteria.pipelineId}` : "all pipelines"
+    ].join(" | ")
+    : "Manual deal-ID batch";
+  const queuePortalId = payload.source?.portalId ? String(payload.source.portalId) : "";
 
   container.innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">Source</p>
+      <p class="verification-note">${escapeHtml(payload.source?.mode || "HUBSPOT_LIVE_QUEUE")} | ${escapeHtml(criteriaSummary)}</p>
+      <p class="verification-note">Discovered deals: ${discoveredDealIds.length > 0 ? escapeHtml(discoveredDealIds.join(", ")) : "none"}</p>
+    </div>
     <div class="verification-grid">
       <article class="verification-metric">
         <span class="score-label">Deals</span>
@@ -1097,7 +1120,12 @@ function renderHubSpotLiveQueue(payload) {
     <div class="verification-block">
       <p class="score-label">Ranked queue</p>
       <ul class="verification-list">
-        ${queue.map((item) => `<li>${escapeHtml(item.dealName)} | ${escapeHtml(item.riskLevel)} | ${formatScore(item.rescueScore)} | ${escapeHtml(item.nextBestAction || "No action")}</li>`).join("") || "<li>No at-risk live queue item returned.</li>"}
+        ${queue.map((item) => `
+          <li>
+            ${escapeHtml(item.dealName)} | ${escapeHtml(item.riskLevel)} | ${formatScore(item.rescueScore)} | ${escapeHtml(item.nextBestAction || "No action")}
+            <button type="button" class="queue-open-button" data-hubspot-live-deal-id="${escapeHtml(item.dealId)}" data-hubspot-portal-id="${escapeHtml(queuePortalId)}">Open live deal</button>
+          </li>
+        `).join("") || "<li>No at-risk live queue item returned.</li>"}
       </ul>
     </div>
   `;
@@ -1799,12 +1827,66 @@ async function handleHubSpotLiveQueueClick() {
     const dealIds = document.getElementById("hubspot-live-queue-input").value;
 
     appState.hubspotLiveQueue = await loadHubSpotLiveQueue(portalId || "", dealIds);
+    if ((appState.hubspotLiveQueue.deals || []).length > 0) {
+      document.getElementById("hubspot-live-deal-input").value = appState.hubspotLiveQueue.deals[0].normalizedDeal.id;
+    }
     renderHubSpotLiveQueue(appState.hubspotLiveQueue);
     await refreshHubSpot();
     await refreshSystemReport();
   } catch (error) {
     document.getElementById("hubspot-live-queue").innerHTML = `
       <p class="score-label">Live queue failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
+async function handleHubSpotLiveSearchClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const pipelineId = document.getElementById("hubspot-live-search-pipeline-input").value.trim();
+    const minimumLastActivityAgeDays = Number(document.getElementById("hubspot-live-search-stale-days-input").value);
+    const limit = Number(document.getElementById("hubspot-live-search-limit-input").value);
+
+    appState.hubspotLiveQueue = await loadHubSpotLiveSearch({
+      portalId: portalId || null,
+      pipelineId: pipelineId || null,
+      minimumLastActivityAgeDays,
+      limit
+    });
+    if ((appState.hubspotLiveQueue.discoveredDealIds || []).length > 0) {
+      document.getElementById("hubspot-live-deal-input").value = appState.hubspotLiveQueue.discoveredDealIds[0];
+    }
+    renderHubSpotLiveQueue(appState.hubspotLiveQueue);
+    await refreshHubSpot();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-queue").innerHTML = `
+      <p class="score-label">Live search failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
+async function handleHubSpotLiveQueueResultClick(event) {
+  const button = event.target.closest("[data-hubspot-live-deal-id]");
+  if (!button) {
+    return;
+  }
+
+  try {
+    const portalId = button.getAttribute("data-hubspot-portal-id") || "";
+    const dealId = button.getAttribute("data-hubspot-live-deal-id") || "";
+
+    document.getElementById("hubspot-live-portal-input").value = portalId;
+    document.getElementById("hubspot-live-deal-input").value = dealId;
+    appState.hubspotLivePreview = await loadHubSpotLivePreview(portalId, dealId);
+    renderHubSpotLivePreview(appState.hubspotLivePreview);
+    await refreshHubSpot();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-preview").innerHTML = `
+      <p class="score-label">Live preview failed</p>
       <p class="verification-note">${escapeHtml(error.message)}</p>
     `;
   }
@@ -1958,6 +2040,8 @@ async function main() {
   const hubSpotLiveDraftButton = document.getElementById("hubspot-live-draft-button");
   const hubSpotLiveNoteButton = document.getElementById("hubspot-live-note-button");
   const hubSpotLiveQueueButton = document.getElementById("hubspot-live-queue-button");
+  const hubSpotLiveSearchButton = document.getElementById("hubspot-live-search-button");
+  const hubSpotLiveQueuePanel = document.getElementById("hubspot-live-queue");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -2021,9 +2105,11 @@ async function main() {
     hubSpotLiveDraftButton.addEventListener("click", handleHubSpotLiveDraftClick);
     hubSpotLiveNoteButton.addEventListener("click", handleHubSpotLiveNoteClick);
     hubSpotLiveQueueButton.addEventListener("click", handleHubSpotLiveQueueClick);
+    hubSpotLiveSearchButton.addEventListener("click", handleHubSpotLiveSearchClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
+    hubSpotLiveQueuePanel.addEventListener("click", handleHubSpotLiveQueueResultClick);
 
     queueList.addEventListener("click", async (event) => {
       const button = event.target.closest("[data-deal-id]");

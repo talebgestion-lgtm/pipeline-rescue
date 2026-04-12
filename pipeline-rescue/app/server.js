@@ -10,6 +10,7 @@ const {
   createLiveQueueManagerDigest,
   validateLiveQueueRequestPayload
 } = require("./lib/hubspot-live-queue");
+const { validateLiveSearchPayload } = require("./lib/hubspot-live-search");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
 const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
@@ -22,7 +23,12 @@ const {
   validateHubSpotConfigPayload
 } = require("./lib/hubspot-oauth");
 const { loadEnvFile } = require("./lib/env-loader");
-const { createHubSpotDraftNote, createHubSpotRescueTask, loadHubSpotDealPreview } = require("./lib/hubspot-client");
+const {
+  createHubSpotDraftNote,
+  createHubSpotRescueTask,
+  loadHubSpotDealPreview,
+  searchHubSpotDeals
+} = require("./lib/hubspot-client");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
 const rootDir = __dirname;
@@ -153,6 +159,45 @@ async function buildHubSpotLiveQueueContext({ appState, hubspotState, portalId, 
     })),
     managerDigest: createLiveQueueManagerDigest(overview, previews),
     installState
+  };
+}
+
+function buildEmptyHubSpotLiveQueueResponse({ appState, source, criteria }) {
+  const portalName = source.hubDomain ? `HubSpot ${source.hubDomain}` : `HubSpot portal ${source.portalId}`;
+  const overview = {
+    meta: {
+      appName: "Pipeline Rescue",
+      version: appState.packageManifest.version,
+      generatedAt: source.fetchedAt,
+      portalName,
+      scenarioLabel: "HubSpot live queue (0 deals)",
+      scenarioDescription: "Live multi-deal queue normalized into the deterministic rescue engine.",
+      engineMode: "DETERMINISTIC_LOCAL"
+    },
+    summary: {
+      analyzedDeals: 0,
+      atRiskDeals: 0,
+      criticalDeals: 0,
+      engagedRescues: 0,
+      recoveredRevenueCandidate: 0
+    },
+    queue: []
+  };
+
+  return {
+    criteria,
+    discoveredDealIds: [],
+    source: {
+      mode: "HUBSPOT_LIVE_SEARCH",
+      portalId: source.portalId,
+      hubDomain: source.hubDomain || null,
+      fetchedAt: source.fetchedAt,
+      tokenRefreshed: Boolean(source.tokenRefreshed),
+      dealCount: 0
+    },
+    overview,
+    deals: [],
+    managerDigest: createLiveQueueManagerDigest(overview, [])
   };
 }
 
@@ -788,6 +833,74 @@ const server = http.createServer(async (request, response) => {
       }
 
       sendJson(response, 200, {
+        source: liveQueue.source,
+        overview: liveQueue.overview,
+        deals: liveQueue.deals,
+        managerDigest: liveQueue.managerDigest
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hubspot/live/search") {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live search unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live search unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const body = validateLiveSearchPayload(await readJsonBody(request));
+      const liveSearch = await searchHubSpotDeals({
+        config: hubspotState.hubspotConfig,
+        installState: hubspotState.installState,
+        portalId: body.portalId || null,
+        criteria: body
+      });
+
+      if (liveSearch.dealIds.length === 0) {
+        if (liveSearch.source.tokenRefreshed) {
+          saveJsonAtomic(hubspotInstallStatePath, liveSearch.installState);
+        }
+
+        sendJson(response, 200, buildEmptyHubSpotLiveQueueResponse({
+          appState,
+          source: liveSearch.source,
+          criteria: liveSearch.criteria
+        }));
+        return;
+      }
+
+      const liveQueue = await buildHubSpotLiveQueueContext({
+        appState,
+        hubspotState: {
+          ...hubspotState,
+          installState: liveSearch.installState
+        },
+        portalId: body.portalId || null,
+        dealIds: liveSearch.dealIds
+      });
+
+      liveQueue.source.mode = "HUBSPOT_LIVE_SEARCH";
+      liveQueue.source.tokenRefreshed = Boolean(liveQueue.source.tokenRefreshed || liveSearch.source.tokenRefreshed);
+      liveQueue.source.portalId = liveQueue.source.portalId || liveSearch.source.portalId;
+      liveQueue.source.hubDomain = liveQueue.source.hubDomain || liveSearch.source.hubDomain || null;
+
+      if (liveQueue.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, liveQueue.installState);
+      }
+
+      sendJson(response, 200, {
+        criteria: liveSearch.criteria,
+        discoveredDealIds: liveSearch.dealIds,
         source: liveQueue.source,
         overview: liveQueue.overview,
         deals: liveQueue.deals,

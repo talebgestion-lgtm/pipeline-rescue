@@ -1,6 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createHubSpotDraftNote, createHubSpotRescueTask, loadHubSpotDealPreview } = require("../lib/hubspot-client");
+const {
+  createHubSpotDraftNote,
+  createHubSpotRescueTask,
+  loadHubSpotDealPreview,
+  searchHubSpotDeals
+} = require("../lib/hubspot-client");
 
 const validConfig = {
   enabled: true,
@@ -249,6 +254,59 @@ test("loadHubSpotDealPreview refreshes the access token when the stored token is
   assert.equal(refreshed, true);
   assert.equal(preview.source.tokenRefreshed, true);
   assert.equal(preview.installState.installs[0].accessToken, "fresh_token");
+});
+
+test("searchHubSpotDeals posts deterministic CRM criteria and returns discovered IDs", async () => {
+  const result = await searchHubSpotDeals({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          hubDomain: "demo.hubspot.com",
+          accessToken: "access_token",
+          refreshToken: "refresh_token",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    portalId: "123456",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    criteria: {
+      portalId: "123456",
+      pipelineId: "default",
+      minimumLastActivityAgeDays: 7,
+      limit: 3
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/deals/search") {
+        const body = JSON.parse(options.body);
+        assert.equal(body.limit, 3);
+        assert.equal(body.filterGroups[0].filters[0].propertyName, "hs_lastactivitydate");
+        assert.equal(body.filterGroups[0].filters[0].operator, "LT");
+        assert.equal(body.filterGroups[0].filters[3].propertyName, "pipeline");
+        assert.equal(body.filterGroups[0].filters[3].value, "default");
+        assert.deepEqual(body.sorts, ["-hs_lastactivitydate"]);
+
+        return createJsonResponse(200, {
+          results: [
+            { id: "987" },
+            { id: "988" },
+            { id: "987" }
+          ]
+        });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.deepEqual(result.dealIds, ["987", "988"]);
+  assert.equal(result.source.portalId, "123456");
+  assert.equal(result.source.hubDomain, "demo.hubspot.com");
 });
 
 test("createHubSpotRescueTask writes an associated HubSpot task from live analysis", async () => {
