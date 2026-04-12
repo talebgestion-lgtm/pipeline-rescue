@@ -8,7 +8,8 @@ const appState = {
   installReady: false,
   providerProbe: null,
   liveDraft: null,
-  hubspotLivePreview: null
+  hubspotLivePreview: null,
+  hubspotLiveQueue: null
 };
 
 function getSearchScenario() {
@@ -119,6 +120,17 @@ async function createHubSpotLiveNote(portalId, dealId) {
   const query = portalId ? `?portalId=${encodeURIComponent(portalId)}` : "";
   return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}/notes${query}`, {
     method: "POST"
+  });
+}
+
+async function loadHubSpotLiveQueue(portalId, dealIds) {
+  return fetchJson("/api/hubspot/live/queue", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      portalId: portalId || null,
+      dealIds
+    })
   });
 }
 
@@ -1042,6 +1054,55 @@ function renderHubSpotLivePreview(preview) {
   `;
 }
 
+function renderHubSpotLiveQueue(payload) {
+  const container = document.getElementById("hubspot-live-queue");
+
+  if (!payload) {
+    container.innerHTML = `
+      <p class="score-label">Live queue</p>
+      <p class="verification-note">No live HubSpot queue loaded yet.</p>
+    `;
+    return;
+  }
+
+  const summary = payload.overview?.summary || {};
+  const queue = payload.overview?.queue || [];
+  const digest = payload.managerDigest || [];
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Deals</span>
+        <span class="verification-value">${summary.analyzedDeals ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">At risk</span>
+        <span class="verification-value">${summary.atRiskDeals ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Critical</span>
+        <span class="verification-value">${summary.criticalDeals ?? 0}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Revenue candidate</span>
+        <span class="verification-value">${formatCurrency(summary.recoveredRevenueCandidate)}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Manager digest</p>
+      <ul class="verification-list">
+        ${digest.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No manager digest available.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Ranked queue</p>
+      <ul class="verification-list">
+        ${queue.map((item) => `<li>${escapeHtml(item.dealName)} | ${escapeHtml(item.riskLevel)} | ${formatScore(item.rescueScore)} | ${escapeHtml(item.nextBestAction || "No action")}</li>`).join("") || "<li>No at-risk live queue item returned.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
 function renderAiCycleReport(report) {
   const container = document.getElementById("ai-cycle-report");
 
@@ -1400,7 +1461,9 @@ async function renderScenario(catalog, scenarioId) {
   renderAiCycleReport(null);
   appState.liveDraft = null;
   appState.hubspotLivePreview = null;
+  appState.hubspotLiveQueue = null;
   renderHubSpotLivePreview(null);
+  renderHubSpotLiveQueue(null);
   await refreshManagerReport();
   await refreshFeedbackReport();
   await refreshAiControlCenter();
@@ -1730,6 +1793,23 @@ async function handleHubSpotLiveNoteClick() {
   }
 }
 
+async function handleHubSpotLiveQueueClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const dealIds = document.getElementById("hubspot-live-queue-input").value;
+
+    appState.hubspotLiveQueue = await loadHubSpotLiveQueue(portalId || "", dealIds);
+    renderHubSpotLiveQueue(appState.hubspotLiveQueue);
+    await refreshHubSpot();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-queue").innerHTML = `
+      <p class="score-label">Live queue failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
 async function handleProbeAiProviderClick() {
   try {
     appState.providerProbe = await probeProvider();
@@ -1877,6 +1957,7 @@ async function main() {
   const hubSpotLiveTaskButton = document.getElementById("hubspot-live-task-button");
   const hubSpotLiveDraftButton = document.getElementById("hubspot-live-draft-button");
   const hubSpotLiveNoteButton = document.getElementById("hubspot-live-note-button");
+  const hubSpotLiveQueueButton = document.getElementById("hubspot-live-queue-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1939,6 +2020,7 @@ async function main() {
     hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
     hubSpotLiveDraftButton.addEventListener("click", handleHubSpotLiveDraftClick);
     hubSpotLiveNoteButton.addEventListener("click", handleHubSpotLiveNoteClick);
+    hubSpotLiveQueueButton.addEventListener("click", handleHubSpotLiveQueueClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);

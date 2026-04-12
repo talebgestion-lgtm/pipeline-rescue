@@ -228,9 +228,12 @@
             <input id="hubspot-live-portal-input" class="scenario-select" placeholder="Optional when one install is stored">
             <label class="score-label" for="hubspot-live-deal-input">HubSpot deal ID</label>
             <input id="hubspot-live-deal-input" class="scenario-select" placeholder="Required live HubSpot deal ID">
+            <label class="score-label" for="hubspot-live-queue-input">HubSpot deal IDs for live queue</label>
+            <textarea id="hubspot-live-queue-input" class="feedback-note-input" rows="4" placeholder="One HubSpot deal ID per line, or comma-separated"></textarea>
           </div>
           <div class="feedback-export-actions">
             <button type="button" class="refresh-button" id="hubspot-live-preview-button">Load Live Deal Preview</button>
+            <button type="button" class="refresh-button" id="hubspot-live-queue-button">Load Live HubSpot Queue</button>
             <button type="button" class="refresh-button" id="hubspot-live-draft-button">Generate Live HubSpot Draft</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-task-button">Create Live HubSpot Task</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-note-button">Save Draft As HubSpot Note</button>
@@ -238,6 +241,10 @@
           <div class="verification-card" id="hubspot-live-preview">
             <p class="score-label">Live preview</p>
             <p class="verification-note">No live HubSpot deal preview loaded yet.</p>
+          </div>
+          <div class="verification-card" id="hubspot-live-queue">
+            <p class="score-label">Live queue</p>
+            <p class="verification-note">No live HubSpot queue loaded yet.</p>
           </div>
 
           <header class="panel-header">

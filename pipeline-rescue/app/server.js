@@ -5,6 +5,11 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const {
+  buildLiveQueueScenario,
+  createLiveQueueManagerDigest,
+  validateLiveQueueRequestPayload
+} = require("./lib/hubspot-live-queue");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
 const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
@@ -89,6 +94,65 @@ async function buildHubSpotLiveContext({ appState, hubspotState, portalId, dealI
     preview,
     overview,
     dealAnalysis
+  };
+}
+
+async function buildHubSpotLiveQueueContext({ appState, hubspotState, portalId, dealIds }) {
+  const analysisTimestamp = new Date().toISOString();
+  let installState = hubspotState.installState;
+  let tokenRefreshed = false;
+  const previews = [];
+
+  for (const dealId of dealIds) {
+    const preview = await loadHubSpotDealPreview({
+      config: hubspotState.hubspotConfig,
+      installState,
+      portalId,
+      dealId,
+      analysisTimestamp
+    });
+
+    installState = preview.installState;
+    tokenRefreshed = tokenRefreshed || Boolean(preview.source.tokenRefreshed);
+    previews.push(preview);
+  }
+
+  const liveFixtures = {
+    defaultScenario: "hubspot-live-queue",
+    stageExpectationsDays: appState.fixtures.stageExpectationsDays,
+    scenarios: {
+      "hubspot-live-queue": buildLiveQueueScenario(previews, analysisTimestamp)
+    }
+  };
+
+  const overview = stampMetaVersion(
+    buildOverview(liveFixtures, "hubspot-live-queue"),
+    appState.packageManifest.version
+  );
+  const dealAnalyses = previews.map((preview) => stampMetaVersion(
+    buildDealAnalysis(liveFixtures, "hubspot-live-queue", preview.normalizedDeal.id),
+    appState.packageManifest.version
+  ));
+
+  return {
+    source: {
+      mode: "HUBSPOT_LIVE_QUEUE",
+      portalId: previews[0].source.portalId,
+      hubDomain: previews[0].source.hubDomain || null,
+      fetchedAt: analysisTimestamp,
+      tokenRefreshed,
+      dealCount: previews.length
+    },
+    overview,
+    deals: previews.map((preview, index) => ({
+      source: preview.source,
+      normalizedDeal: preview.normalizedDeal,
+      normalizationWarnings: preview.normalizationWarnings,
+      graph: preview.graph,
+      dealAnalysis: dealAnalyses[index]
+    })),
+    managerDigest: createLiveQueueManagerDigest(overview, previews),
+    installState
   };
 }
 
@@ -690,6 +754,44 @@ const server = http.createServer(async (request, response) => {
         graph: preview.graph,
         dealAnalysis,
         liveDraft: draftResult
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hubspot/live/queue") {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live queue unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live queue unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const body = validateLiveQueueRequestPayload(await readJsonBody(request));
+      const liveQueue = await buildHubSpotLiveQueueContext({
+        appState,
+        hubspotState,
+        portalId: body.portalId || null,
+        dealIds: body.dealIds
+      });
+
+      if (liveQueue.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, liveQueue.installState);
+      }
+
+      sendJson(response, 200, {
+        source: liveQueue.source,
+        overview: liveQueue.overview,
+        deals: liveQueue.deals,
+        managerDigest: liveQueue.managerDigest
       });
       return;
     }

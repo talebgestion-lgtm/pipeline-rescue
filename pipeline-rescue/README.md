@@ -83,6 +83,7 @@ It now has:
 - live provider probe and focused-deal live draft path
 - HubSpot OAuth config, install URL, and local install persistence
 - live HubSpot deal preview with local token refresh and deterministic normalization
+- live HubSpot multi-deal queue for manager rescue review
 - live HubSpot task write-back from the deterministic rescue recommendation
 - live HubSpot draft generation and note write-back for CRM-side execution traces
 - imported anti-memory and anti-hallucination guardrails translated into product rules
