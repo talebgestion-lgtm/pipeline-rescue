@@ -984,11 +984,13 @@ function renderHubSpotLivePreview(preview) {
   const verification = preview.dealAnalysis?.verification || {};
   const contacts = preview.graph?.contacts || [];
   const tasks = preview.graph?.tasks || [];
+  const notes = preview.graph?.notes || [];
   const warnings = preview.normalizationWarnings || [];
   const liveTask = preview.hubspotTask || null;
   const liveDraft = preview.liveDraft || null;
   const hubspotNote = preview.hubspotNote || null;
   const activeRescueTask = tasks.find((task) => task.isRescueTask && task.isOpen) || null;
+  const existingRescueNote = notes.find((note) => note.isRescueNote) || null;
 
   container.innerHTML = `
     <div class="verification-grid">
@@ -1039,12 +1041,27 @@ function renderHubSpotLivePreview(preview) {
         ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.isRescueTask ? " | rescue task" : ""}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
       </ul>
     </div>
+    <div class="verification-block">
+      <p class="score-label">Notes</p>
+      <ul class="verification-list">
+        ${notes.map((note) => `<li>${escapeHtml(note.id)}${note.isRescueNote ? " | rescue note" : ""}${note.draftSubject ? ` | ${escapeHtml(note.draftSubject)}` : ""}${note.noteAt ? ` | ${escapeHtml(new Date(note.noteAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated note returned.</li>"}
+      </ul>
+    </div>
     ${activeRescueTask ? `
       <div class="verification-block">
         <p class="score-label">Active rescue task</p>
         <ul class="verification-list">
           <li>${escapeHtml(activeRescueTask.id)} | ${escapeHtml(activeRescueTask.subject)}</li>
           <li>${escapeHtml(activeRescueTask.status)}${activeRescueTask.dueAt ? ` | ${escapeHtml(new Date(activeRescueTask.dueAt).toLocaleString("en-GB"))}` : ""}</li>
+        </ul>
+      </div>
+    ` : ""}
+    ${existingRescueNote ? `
+      <div class="verification-block">
+        <p class="score-label">Existing rescue note</p>
+        <ul class="verification-list">
+          <li>${escapeHtml(existingRescueNote.id)}${existingRescueNote.draftSubject ? ` | ${escapeHtml(existingRescueNote.draftSubject)}` : ""}</li>
+          <li>${existingRescueNote.noteAt ? escapeHtml(new Date(existingRescueNote.noteAt).toLocaleString("en-GB")) : "No note timestamp"}${existingRescueNote.ownerId ? ` | owner ${escapeHtml(existingRescueNote.ownerId)}` : ""}</li>
         </ul>
       </div>
     ` : ""}

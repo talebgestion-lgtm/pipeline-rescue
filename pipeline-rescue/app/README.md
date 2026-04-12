@@ -137,6 +137,7 @@ The UI now supports:
 - live HubSpot owner resolution so previews and queue items use real owner names when the Owners API is accessible
 - idempotent live HubSpot task writes that block duplicate open rescue tasks on the same deal
 - bounded HubSpot retry handling for transient `429` and `5xx` API failures
+- note-capable HubSpot OAuth defaults and duplicate rescue-note blocking on the same deal
 - a live HubSpot criteria-discovery path to find stale deals without manually collecting IDs
 - a live HubSpot multi-deal queue path for manager-level rescue review
 - a live HubSpot rescue batch path that writes only validated at-risk tasks from the discovered queue

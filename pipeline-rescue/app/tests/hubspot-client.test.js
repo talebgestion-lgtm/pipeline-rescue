@@ -12,7 +12,14 @@ const validConfig = {
   clientId: "client_123",
   clientSecretEnvVar: "HUBSPOT_CLIENT_SECRET",
   redirectUri: "http://localhost:4179/api/hubspot/oauth/callback",
-  scopes: ["oauth", "crm.objects.deals.read", "crm.objects.contacts.read", "crm.objects.tasks.read"],
+  scopes: [
+    "oauth",
+    "crm.objects.deals.read",
+    "crm.objects.contacts.read",
+    "crm.objects.tasks.read",
+    "crm.objects.notes.read",
+    "crm.objects.notes.write"
+  ],
   optionalScopes: [],
   preferredAccountId: null
 };
@@ -123,6 +130,10 @@ test("loadHubSpotDealPreview normalizes a live HubSpot deal graph", async () => 
             }
           ]
         });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/notes") {
+        return createJsonResponse(200, { results: [] });
       }
 
       if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/contacts/batch/read") {
@@ -549,6 +560,10 @@ test("createHubSpotRescueTask writes an associated HubSpot task from live analys
       return createJsonResponse(200, { results: [] });
     }
 
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/notes") {
+      return createJsonResponse(200, { results: [] });
+    }
+
     if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/contacts/batch/read") {
       return createJsonResponse(200, {
         results: [{ id: "201", properties: { firstname: "Maya", lastname: "Brooks", email: "maya@acme.example" } }]
@@ -807,7 +822,8 @@ test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", as
     graph: {
       deal: { id: "987" },
       companies: [{ id: "301", name: "Acme" }],
-      contacts: [{ id: "201", name: "Maya Brooks", email: "maya@acme.example" }]
+      contacts: [{ id: "201", name: "Maya Brooks", email: "maya@acme.example" }],
+      notes: []
     },
     normalizedDeal: {
       owner: { id: "44" }
@@ -872,6 +888,61 @@ test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", as
   assert.equal(result.note.associatedDealId, "987");
   assert.equal(result.note.associatedCompanyCount, 1);
   assert.equal(result.note.associatedContactCount, 1);
+});
+
+test("createHubSpotDraftNote blocks when an equivalent rescue note already exists", async () => {
+  await assert.rejects(
+    () => createHubSpotDraftNote({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: {
+          deal: { id: "987" },
+          companies: [],
+          contacts: [],
+          notes: [
+            {
+              id: "note_100",
+              isRescueNote: true,
+              draftSubject: "Quick follow-up on Acme Expansion"
+            }
+          ]
+        },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: {
+          dealId: "987",
+          dealName: "Acme Expansion",
+          rescueScore: 86
+        },
+        verification: {
+          validationStatus: "VALIDATED"
+        }
+      },
+      draftResult: {
+        mode: "DETERMINISTIC_LOCAL",
+        draft: {
+          subject: "Quick follow-up on Acme Expansion",
+          body: "Hi Maya, can we confirm the next step tomorrow?"
+        }
+      },
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async () => createJsonResponse(200, {})
+    }),
+    /equivalent Pipeline Rescue note already exists/
+  );
 });
 
 test("createHubSpotDraftNote blocks when no draft payload is available", async () => {

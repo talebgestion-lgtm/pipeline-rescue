@@ -8,7 +8,9 @@
     "crm.objects.deals.read",
     "crm.objects.contacts.read",
     "crm.objects.tasks.read",
-    "crm.objects.tasks.write"
+    "crm.objects.tasks.write",
+    "crm.objects.notes.read",
+    "crm.objects.notes.write"
   ],
   "optionalScopes": [],
   "preferredAccountId": null

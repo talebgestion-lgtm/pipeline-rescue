@@ -482,6 +482,45 @@ function findOpenRescueTask(tasks) {
   return (Array.isArray(tasks) ? tasks : []).find((task) => task.isRescueTask && task.isOpen) || null;
 }
 
+function extractDraftSubjectFromNoteBody(body) {
+  if (typeof body !== "string") {
+    return null;
+  }
+
+  const subjectMatch = body.match(/(?:^|\n)Subject:\s*(.+?)(?:\n|$)/i);
+  return subjectMatch ? subjectMatch[1].trim() : null;
+}
+
+function normalizeNotes(records) {
+  return records.map((record) => {
+    const properties = record.properties || {};
+    const body = properties.hs_note_body || null;
+    const noteAt = properties.hs_timestamp || null;
+    const isRescueNote = typeof body === "string" && /Pipeline Rescue follow-up draft/i.test(body);
+
+    return {
+      id: String(record.id),
+      body,
+      noteAt,
+      ownerId: properties.hubspot_owner_id ? String(properties.hubspot_owner_id) : null,
+      isRescueNote,
+      draftSubject: extractDraftSubjectFromNoteBody(body)
+    };
+  });
+}
+
+function findMatchingRescueNote(notes, draftSubject) {
+  const normalizedSubject = String(draftSubject || "").trim().toLowerCase();
+  if (!normalizedSubject) {
+    return null;
+  }
+
+  return (Array.isArray(notes) ? notes : []).find((note) => (
+    note.isRescueNote
+    && String(note.draftSubject || "").trim().toLowerCase() === normalizedSubject
+  )) || null;
+}
+
 function formatOwnerDisplayName(ownerRecord, ownerId) {
   if (!ownerRecord) {
     return ownerId ? `Owner ${ownerId}` : "Unassigned";
@@ -545,7 +584,17 @@ async function loadOwnerRecord(liveSession, ownerId) {
   }
 }
 
-function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisTimestamp, ownerRecord, ownerLookupWarning }) {
+function buildNormalizedDeal({
+  dealRecord,
+  contacts,
+  companies,
+  tasks,
+  notes,
+  analysisTimestamp,
+  ownerRecord,
+  ownerLookupWarning,
+  noteLookupWarning
+}) {
   const properties = dealRecord.properties || {};
   const stageId = properties.dealstage || null;
   const amount = toNumber(properties.amount);
@@ -581,6 +630,13 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
   if (existingRescueTask) {
     normalizationWarnings.push(`An open Pipeline Rescue task already exists on this deal (${existingRescueTask.id}).`);
   }
+  if (noteLookupWarning) {
+    normalizationWarnings.push(noteLookupWarning);
+  }
+  const existingRescueNote = (Array.isArray(notes) ? notes : []).find((note) => note.isRescueNote) || null;
+  if (existingRescueNote) {
+    normalizationWarnings.push(`A Pipeline Rescue note already exists on this deal (${existingRescueNote.id}).`);
+  }
 
   const closedWon = toBoolean(properties.hs_is_closed_won) === true || /won/i.test(stageId || "");
   const closedLost = toBoolean(properties.hs_is_closed_lost) === true || /lost/i.test(stageId || "");
@@ -604,6 +660,7 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
     hasNextStep: Boolean(String(properties.hs_next_step || "").trim()),
     hasFutureTask,
     hasOpenRescueTask: Boolean(existingRescueTask),
+    hasRescueNote: Boolean(existingRescueNote),
     contacts: contacts.map((contact) => ({
       id: contact.id,
       name: contact.name,
@@ -615,7 +672,7 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
   };
 }
 
-function buildPreviewPayload({ liveSession, dealId, dealRecord, normalizedDeal, companies, contacts, tasks }) {
+function buildPreviewPayload({ liveSession, dealId, dealRecord, normalizedDeal, companies, contacts, tasks, notes }) {
   const activeInstall = liveSession.getInstall();
 
   return {
@@ -639,7 +696,8 @@ function buildPreviewPayload({ liveSession, dealId, dealRecord, normalizedDeal, 
       },
       companies,
       contacts,
-      tasks
+      tasks,
+      notes
     },
     scenario: {
       portalName: activeInstall.hubDomain ? `HubSpot ${activeInstall.hubDomain}` : `HubSpot portal ${activeInstall.portalId}`,
@@ -858,11 +916,26 @@ async function loadHubSpotDealData(options) {
     liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/tasks`)
   ]);
 
+  let noteAssociations = { results: [] };
+  let noteLookupWarning = null;
+  try {
+    noteAssociations = await liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/notes`);
+  } catch (error) {
+    if (error.statusCode === 403) {
+      noteLookupWarning = "HubSpot notes could not be loaded because the token lacks note-read access.";
+    } else if (error.statusCode === 404) {
+      noteLookupWarning = "HubSpot notes association lookup is unavailable for this portal.";
+    } else {
+      throw error;
+    }
+  }
+
   const contactIds = extractAssociationResults(contactAssociations).map((entry) => String(entry.toObjectId));
   const companyIds = extractAssociationResults(companyAssociations).map((entry) => String(entry.toObjectId));
   const taskIds = extractAssociationResults(taskAssociations).map((entry) => String(entry.toObjectId));
+  const noteIds = extractAssociationResults(noteAssociations).map((entry) => String(entry.toObjectId));
 
-  const [contactRecords, companyRecords, taskRecords] = await Promise.all([
+  const [contactRecords, companyRecords, taskRecords, noteRecords] = await Promise.all([
     batchReadObjects({
       install: liveSession.getInstall(),
       objectType: "contacts",
@@ -886,20 +959,31 @@ async function loadHubSpotDealData(options) {
       properties: ["hs_task_subject", "hs_task_status", "hs_timestamp", "hs_task_body"],
       fetchImpl: options.fetchImpl,
       requestImpl: liveSession.requestWithRefresh
+    }),
+    batchReadObjects({
+      install: liveSession.getInstall(),
+      objectType: "notes",
+      ids: noteIds,
+      properties: ["hs_note_body", "hs_timestamp", "hubspot_owner_id"],
+      fetchImpl: options.fetchImpl,
+      requestImpl: liveSession.requestWithRefresh
     })
   ]);
 
   const contacts = normalizeContacts(contactRecords, extractAssociationResults(contactAssociations));
   const companies = normalizeCompanies(companyRecords);
   const tasks = normalizeTasks(taskRecords, liveSession.analysisTimestamp);
+  const notes = normalizeNotes(noteRecords);
   const normalizedDeal = buildNormalizedDeal({
     dealRecord,
     contacts,
     companies,
     tasks,
+    notes,
     analysisTimestamp: liveSession.analysisTimestamp,
     ownerRecord: ownerResolution.ownerRecord,
-    ownerLookupWarning: ownerResolution.warning
+    ownerLookupWarning: ownerResolution.warning,
+    noteLookupWarning
   });
 
   return {
@@ -909,6 +993,7 @@ async function loadHubSpotDealData(options) {
     contacts,
     companies,
     tasks,
+    notes,
     normalizedDeal
   };
 }
@@ -923,7 +1008,8 @@ async function loadHubSpotDealPreview(options) {
     normalizedDeal: liveData.normalizedDeal,
     companies: liveData.companies,
     contacts: liveData.contacts,
-    tasks: liveData.tasks
+    tasks: liveData.tasks,
+    notes: liveData.notes
   });
 }
 
@@ -1008,6 +1094,15 @@ function buildHubSpotNotePayload({ preview, analysis, draftResult, noteAt }) {
 
   if (!draft || typeof draft.subject !== "string" || typeof draft.body !== "string") {
     throw createHubSpotClientError("A usable draft is required before writing a HubSpot note.", 409);
+  }
+
+  const existingRescueNote = findMatchingRescueNote(preview.graph?.notes || [], draft.subject);
+  if (existingRescueNote) {
+    throw createHubSpotClientError(
+      "HubSpot note creation is blocked because an equivalent Pipeline Rescue note already exists on this deal.",
+      409,
+      `Existing rescue note ${existingRescueNote.id}: ${existingRescueNote.draftSubject || draft.subject}`
+    );
   }
 
   const ownerId = preview.normalizedDeal && /^\d+$/.test(String(preview.normalizedDeal.owner?.id || ""))
