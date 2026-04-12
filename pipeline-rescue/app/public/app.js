@@ -18,7 +18,17 @@ async function fetchJson(url, options) {
   const response = await fetch(url, options);
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let detail = `Request failed: ${response.status}`;
+    try {
+      const payload = await response.json();
+      detail = payload.detail
+        ? `${payload.error || "Request failed"}: ${payload.detail}`
+        : payload.error || detail;
+    } catch (error) {
+      // Ignore JSON parsing errors for non-JSON responses.
+    }
+
+    throw new Error(detail);
   }
 
   return response.json();
@@ -70,6 +80,19 @@ async function loadAiProviderConfig() {
 
 async function loadAiProviderStatus() {
   return fetchJson("/api/ai/provider-status");
+}
+
+async function loadHubSpotConfig() {
+  return fetchJson("/api/hubspot/config");
+}
+
+async function loadHubSpotStatus() {
+  return fetchJson("/api/hubspot/status");
+}
+
+async function loadHubSpotInstallUrl(accountId) {
+  const suffix = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+  return fetchJson(`/api/hubspot/install-url${suffix}`);
 }
 
 async function probeProvider() {
@@ -150,6 +173,22 @@ async function saveAiProviderConfig(config) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config)
+  });
+}
+
+async function saveHubSpotConfig(config) {
+  return fetchJson("/api/hubspot/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config)
+  });
+}
+
+async function exchangeHubSpotCode(code) {
+  return fetchJson("/api/hubspot/oauth/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code })
   });
 }
 
@@ -809,6 +848,71 @@ function renderAiProviderForm(config) {
   `;
 }
 
+function renderHubSpotStatus(report) {
+  document.getElementById("hubspot-status").innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Status</span>
+        <span class="verification-value">${report.status}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Stored installs</span>
+        <span class="verification-value">${report.installCount ?? 0}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${report.summary}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Blockers</p>
+      <ul class="verification-list">
+        ${(report.blockers || []).map((item) => `<li>${item}</li>`).join("") || "<li>No blocker reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Stored installs</p>
+      <ul class="verification-list">
+        ${(report.installs || []).map((item) => `<li>Portal ${item.portalId || "unknown"} | ${item.hubDomain || "no domain"} | ${new Date(item.connectedAt).toLocaleString("en-GB")}</li>`).join("") || "<li>No HubSpot portal connected yet.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
+function renderHubSpotConfigForm(config) {
+  document.getElementById("hubspot-config-form").innerHTML = `
+    <label class="verification-note"><input type="checkbox" id="hubspot-enabled-input" ${config.enabled ? "checked" : ""}> HubSpot integration enabled</label>
+    <label class="score-label" for="hubspot-client-id-input">Client ID</label>
+    <input id="hubspot-client-id-input" class="scenario-select" value="${escapeHtml(config.clientId)}">
+    <label class="score-label" for="hubspot-secret-env-input">Client secret env var</label>
+    <input id="hubspot-secret-env-input" class="scenario-select" value="${escapeHtml(config.clientSecretEnvVar)}">
+    <label class="score-label" for="hubspot-redirect-uri-input">Redirect URI</label>
+    <input id="hubspot-redirect-uri-input" class="scenario-select" value="${escapeHtml(config.redirectUri)}">
+    <label class="score-label" for="hubspot-scopes-input">Required scopes</label>
+    <textarea id="hubspot-scopes-input" class="feedback-note-input" rows="3" placeholder="One scope per line">${escapeHtml((config.scopes || []).join("\n"))}</textarea>
+    <label class="score-label" for="hubspot-optional-scopes-input">Optional scopes</label>
+    <textarea id="hubspot-optional-scopes-input" class="feedback-note-input" rows="2" placeholder="One optional scope per line">${escapeHtml((config.optionalScopes || []).join("\n"))}</textarea>
+    <label class="score-label" for="hubspot-preferred-account-input">Preferred account ID</label>
+    <input id="hubspot-preferred-account-input" class="scenario-select" value="${escapeHtml(config.preferredAccountId || "")}">
+  `;
+}
+
+function renderHubSpotInstallOutput(payload) {
+  document.getElementById("hubspot-install-output").innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">${escapeHtml(payload.title)}</p>
+      <p class="verification-note">${escapeHtml(payload.message)}</p>
+      ${payload.url ? `<p class="verification-note">${escapeHtml(payload.url)}</p>` : ""}
+    </div>
+  `;
+}
+
 function renderAiCycleReport(report) {
   const container = document.getElementById("ai-cycle-report");
 
@@ -894,6 +998,24 @@ function collectAiProviderForm() {
     requestTimeoutMs: Number(document.getElementById("ai-provider-timeout-input").value),
     temperature: Number(document.getElementById("ai-provider-temperature-input").value),
     maxOutputTokens: Number(document.getElementById("ai-provider-max-tokens-input").value)
+  };
+}
+
+function collectHubSpotConfigForm() {
+  const parseLines = (value) =>
+    String(value)
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  return {
+    enabled: document.getElementById("hubspot-enabled-input").checked,
+    clientId: document.getElementById("hubspot-client-id-input").value.trim(),
+    clientSecretEnvVar: document.getElementById("hubspot-secret-env-input").value.trim(),
+    redirectUri: document.getElementById("hubspot-redirect-uri-input").value.trim(),
+    scopes: parseLines(document.getElementById("hubspot-scopes-input").value),
+    optionalScopes: parseLines(document.getElementById("hubspot-optional-scopes-input").value),
+    preferredAccountId: document.getElementById("hubspot-preferred-account-input").value.trim() || null
   };
 }
 
@@ -1092,6 +1214,12 @@ async function refreshAiProvider() {
   renderAiProviderStatus(status);
 }
 
+async function refreshHubSpot() {
+  const [config, status] = await Promise.all([loadHubSpotConfig(), loadHubSpotStatus()]);
+  renderHubSpotConfigForm(config);
+  renderHubSpotStatus(status);
+}
+
 async function refreshComplianceReport() {
   renderComplianceReport(await loadComplianceReport());
 }
@@ -1147,6 +1275,7 @@ async function renderScenario(catalog, scenarioId) {
   await refreshAiControlCenter();
   await refreshAiPolicy();
   await refreshAiProvider();
+  await refreshHubSpot();
   await refreshComplianceReport();
   await refreshComplianceConfig();
   await refreshSystemReport();
@@ -1288,10 +1417,74 @@ async function handleRunAiCycleClick() {
     await refreshAiControlCenter();
     await refreshAiPolicy();
     await refreshAiProvider();
+    await refreshHubSpot();
   } catch (error) {
     document.getElementById("ai-cycle-report").innerHTML = `
       <p class="verification-note">AI cycle failed: ${error.message}</p>
     `;
+  }
+}
+
+async function handleHubSpotInstallUrlClick() {
+  try {
+    const accountId = document.getElementById("hubspot-install-account-input").value.trim();
+    const payload = await loadHubSpotInstallUrl(accountId || "");
+    renderHubSpotInstallOutput({
+      title: "HubSpot install URL",
+      message: "Open this URL in a browser to start the OAuth install flow.",
+      url: payload.installUrl
+    });
+  } catch (error) {
+    renderHubSpotInstallOutput({
+      title: "HubSpot install URL failed",
+      message: error.message
+    });
+  }
+}
+
+async function handleReloadHubSpotConfigClick() {
+  try {
+    await refreshHubSpot();
+  } catch (error) {
+    renderHubSpotInstallOutput({
+      title: "HubSpot reload failed",
+      message: error.message
+    });
+  }
+}
+
+async function handleSaveHubSpotConfigClick() {
+  try {
+    const response = await saveHubSpotConfig(collectHubSpotConfigForm());
+    renderHubSpotConfigForm(response.config);
+    renderHubSpotStatus(response.status);
+    renderHubSpotInstallOutput({
+      title: "HubSpot config saved",
+      message: "Local HubSpot OAuth config was updated."
+    });
+  } catch (error) {
+    renderHubSpotInstallOutput({
+      title: "HubSpot config save failed",
+      message: error.message
+    });
+  }
+}
+
+async function handleExchangeHubSpotCodeClick() {
+  try {
+    const code = document.getElementById("hubspot-oauth-code-input").value.trim();
+    const response = await exchangeHubSpotCode(code);
+    document.getElementById("hubspot-oauth-code-input").value = "";
+    renderHubSpotStatus(response.status);
+    renderHubSpotInstallOutput({
+      title: "HubSpot connected",
+      message: `Portal ${response.install.portalId || "unknown"} was stored locally.`
+    });
+  } catch (error) {
+    renderHubSpotInstallOutput({
+      title: "HubSpot OAuth exchange failed",
+      message: error.message
+    });
   }
 }
 
@@ -1434,6 +1627,10 @@ async function main() {
   const saveAiProviderButton = document.getElementById("save-ai-provider-button");
   const probeAiProviderButton = document.getElementById("probe-ai-provider-button");
   const liveDraftButton = document.getElementById("live-draft-button");
+  const hubSpotInstallUrlButton = document.getElementById("hubspot-install-url-button");
+  const reloadHubSpotConfigButton = document.getElementById("reload-hubspot-config-button");
+  const saveHubSpotConfigButton = document.getElementById("save-hubspot-config-button");
+  const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1488,6 +1685,10 @@ async function main() {
     probeAiProviderButton.addEventListener("click", handleProbeAiProviderClick);
     reloadAiProviderButton.addEventListener("click", handleReloadAiProviderClick);
     saveAiProviderButton.addEventListener("click", handleSaveAiProviderClick);
+    hubSpotInstallUrlButton.addEventListener("click", handleHubSpotInstallUrlClick);
+    reloadHubSpotConfigButton.addEventListener("click", handleReloadHubSpotConfigClick);
+    saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
+    exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);

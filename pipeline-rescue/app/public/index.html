@@ -197,6 +197,28 @@
 
           <header class="panel-header">
             <div>
+              <p class="eyebrow">HubSpot</p>
+              <h2>OAuth readiness</h2>
+            </div>
+          </header>
+          <div class="verification-card" id="hubspot-status"></div>
+          <div class="feedback-form" id="hubspot-config-form"></div>
+          <div class="feedback-form">
+            <label class="score-label" for="hubspot-install-account-input">HubSpot account ID for install URL</label>
+            <input id="hubspot-install-account-input" class="scenario-select" placeholder="Optional HubSpot account ID">
+            <label class="score-label" for="hubspot-oauth-code-input">Manual OAuth code exchange</label>
+            <input id="hubspot-oauth-code-input" class="scenario-select" placeholder="Paste the HubSpot authorization code if needed">
+          </div>
+          <div class="feedback-export-actions">
+            <button type="button" class="refresh-button" id="hubspot-install-url-button">Generate Install URL</button>
+            <button type="button" class="refresh-button" id="reload-hubspot-config-button">Reload HubSpot Config</button>
+            <button type="button" class="refresh-button secondary-button" id="save-hubspot-config-button">Save HubSpot Config</button>
+            <button type="button" class="refresh-button secondary-button" id="exchange-hubspot-code-button">Exchange OAuth Code</button>
+          </div>
+          <div class="verification-card" id="hubspot-install-output"></div>
+
+          <header class="panel-header">
+            <div>
               <p class="eyebrow">GDPR</p>
               <h2>Compliance gate</h2>
             </div>

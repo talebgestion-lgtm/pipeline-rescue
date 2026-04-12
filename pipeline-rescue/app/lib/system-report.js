@@ -12,6 +12,7 @@ function createSystemReport(options) {
   const packageManifest = options.packageManifest || {};
   const fixtures = options.fixtures || null;
   const gdprState = options.gdprState || {};
+  const hubspotState = options.hubspotState || {};
   const runtimeDiagnostics = options.runtimeDiagnostics || null;
 
   const checks = [];
@@ -60,6 +61,19 @@ function createSystemReport(options) {
     )
   );
 
+  if (hubspotState.hubspotStatus || hubspotState.error) {
+    checks.push(
+      buildCheck(
+        "hubspot_oauth",
+        "HubSpot OAuth",
+        hubspotState.error ? "FAIL" : "PASS",
+        hubspotState.error
+          ? hubspotState.error
+          : `HubSpot status: ${hubspotState.hubspotStatus.status}.`
+      )
+    );
+  }
+
   const failures = checks.filter((check) => check.status === "FAIL");
   const warnings = [];
 
@@ -69,6 +83,10 @@ function createSystemReport(options) {
 
   if (gdprState.complianceReport && gdprState.complianceReport.status === "BLOCKED_FOR_DEPLOYMENT") {
     warnings.push("GDPR strict mode is blocking deployment until mandatory controls are documented.");
+  }
+
+  if (hubspotState.hubspotStatus && hubspotState.hubspotStatus.status !== "READY") {
+    warnings.push(`HubSpot live integration status is ${hubspotState.hubspotStatus.status}.`);
   }
 
   const status = failures.length > 0

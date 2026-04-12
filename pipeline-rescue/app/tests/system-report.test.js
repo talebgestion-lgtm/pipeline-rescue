@@ -16,6 +16,12 @@ test("system report is degraded when GDPR blocks deployment", () => {
       },
       error: null
     },
+    hubspotState: {
+      hubspotStatus: {
+        status: "READY_FOR_INSTALL"
+      },
+      error: null
+    },
     runtimeDiagnostics: {
       stateFilePath: "runtime-state.json",
       stateLoadRecovered: false,
@@ -27,6 +33,7 @@ test("system report is degraded when GDPR blocks deployment", () => {
   assert.equal(report.status, "DEGRADED");
   assert.equal(report.readiness, false);
   assert.ok(report.warnings.some((warning) => /GDPR strict mode/.test(warning)));
+  assert.ok(report.warnings.some((warning) => /HubSpot live integration status/.test(warning)));
 });
 
 test("system report fails when bootstrap breaks", () => {

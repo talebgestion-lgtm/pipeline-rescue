@@ -92,6 +92,11 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/ai/provider-status`
 - `POST /api/ai/provider-probe`
 - `POST /api/deals/DL-1001/live-draft?scenario=critical-stalled`
+- `/api/hubspot/config`
+- `/api/hubspot/status`
+- `/api/hubspot/install-url`
+- `POST /api/hubspot/oauth/exchange`
+- `/api/hubspot/oauth/callback`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -122,6 +127,7 @@ The UI now supports:
 - an executable AI cycle that analyzes the queue and automates only what policy allows
 - a live-provider readiness panel with persisted provider config
 - a live provider probe and live-draft endpoint for the focused deal
+- a HubSpot OAuth config panel, install URL generator, and manual code exchange path
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -183,6 +189,15 @@ AI provider endpoints:
 - `POST /api/ai/provider-probe`
 - `POST /api/deals/DL-1001/live-draft?scenario=critical-stalled`
 
+HubSpot endpoints:
+
+- `GET /api/hubspot/config`
+- `POST /api/hubspot/config`
+- `GET /api/hubspot/status`
+- `GET /api/hubspot/install-url`
+- `POST /api/hubspot/oauth/exchange`
+- `GET /api/hubspot/oauth/callback`
+
 Compliance endpoint:
 
 - `GET /api/compliance/report`
@@ -219,3 +234,10 @@ If you want live OpenAI calls in the portable package:
 2. set `OPENAI_API_KEY`
 3. switch the provider from `NONE` to `OPENAI` in the app
 4. enable `Provider enabled` and `Allow live generation`
+
+For HubSpot OAuth:
+
+1. set `HUBSPOT_CLIENT_SECRET` in `.env`
+2. save the HubSpot config in the app
+3. generate the install URL
+4. complete the install flow or paste the returned code for manual exchange

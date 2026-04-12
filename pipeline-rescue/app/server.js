@@ -7,6 +7,14 @@ const { createSystemReport } = require("./lib/system-report");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
 const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
+const {
+  buildHubSpotInstallUrl,
+  createDefaultInstallState,
+  createHubSpotStatus,
+  exchangeHubSpotAuthCode,
+  normalizeInstallState,
+  validateHubSpotConfigPayload
+} = require("./lib/hubspot-oauth");
 const { loadEnvFile } = require("./lib/env-loader");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
@@ -16,6 +24,8 @@ const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
 const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
 const aiPolicyPath = path.join(rootDir, "data", "ai-policy.json");
 const aiProviderConfigPath = path.join(rootDir, "data", "ai-provider-config.json");
+const hubspotConfigPath = path.join(rootDir, "data", "hubspot-config.json");
+const hubspotInstallStatePath = path.join(rootDir, "data", "hubspot-install-state.json");
 const packagePath = path.join(rootDir, "package.json");
 const envPath = path.join(rootDir, ".env");
 const port = Number(process.env.PORT || 4179);
@@ -78,6 +88,18 @@ function readAiPolicy() {
 
 function readAiProviderConfig() {
   return validateAiProviderConfigPayload(JSON.parse(fs.readFileSync(aiProviderConfigPath, "utf8")));
+}
+
+function readHubSpotConfig() {
+  return validateHubSpotConfigPayload(JSON.parse(fs.readFileSync(hubspotConfigPath, "utf8")));
+}
+
+function readHubSpotInstallState() {
+  if (!fs.existsSync(hubspotInstallStatePath)) {
+    return createDefaultInstallState();
+  }
+
+  return normalizeInstallState(JSON.parse(fs.readFileSync(hubspotInstallStatePath, "utf8")));
 }
 
 function validateComplianceConfigPayload(payload) {
@@ -196,14 +218,40 @@ function getAiProviderState() {
   }
 }
 
+function getHubSpotState() {
+  try {
+    const hubspotConfig = readHubSpotConfig();
+    const installState = readHubSpotInstallState();
+    return {
+      hubspotConfig,
+      installState,
+      hubspotStatus: createHubSpotStatus({
+        config: hubspotConfig,
+        env: process.env,
+        installState
+      }),
+      error: null
+    };
+  } catch (error) {
+    return {
+      hubspotConfig: null,
+      installState: createDefaultInstallState(),
+      hubspotStatus: null,
+      error: error.message
+    };
+  }
+}
+
 function buildSystemState(appState) {
   const gdprState = getGdprState();
   const aiPolicyState = getAiPolicyState();
   const aiProviderState = getAiProviderState();
+  const hubspotState = getHubSpotState();
   const systemReport = createSystemReport({
     packageManifest: appState.packageManifest,
     fixtures: appState.fixtures,
     gdprState,
+    hubspotState,
     runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
     startupError: appState.startupError
   });
@@ -212,6 +260,7 @@ function buildSystemState(appState) {
     gdprState,
     aiPolicyState,
     aiProviderState,
+    hubspotState,
     systemReport
   };
 }
@@ -230,11 +279,24 @@ function ensureRuntimeAvailable(appState, response) {
 
 const appState = bootstrapApplication();
 
+function upsertHubSpotInstall(installState, installRecord) {
+  const nextState = normalizeInstallState(installState);
+  const existingIndex = nextState.installs.findIndex((item) => item.portalId === installRecord.portalId);
+
+  if (existingIndex >= 0) {
+    nextState.installs[existingIndex] = installRecord;
+  } else {
+    nextState.installs.push(installRecord);
+  }
+
+  return nextState;
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
-    const { gdprState, aiPolicyState, aiProviderState, systemReport } = buildSystemState(appState);
+    const { gdprState, aiPolicyState, aiProviderState, hubspotState, systemReport } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
       || (appState.fixtures ? appState.fixtures.defaultScenario : null);
 
@@ -289,6 +351,103 @@ const server = http.createServer(async (request, response) => {
       }
 
       sendJson(response, 200, aiProviderState.aiProviderStatus);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/hubspot/config") {
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot config unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, hubspotState.hubspotConfig);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/hubspot/status") {
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot status unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, hubspotState.hubspotStatus);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/hubspot/install-url") {
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot config unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const accountId = url.searchParams.get("accountId") || hubspotState.hubspotConfig.preferredAccountId || null;
+      const stateToken = url.searchParams.get("state") || `pipeline-rescue-${Date.now()}`;
+      sendJson(response, 200, {
+        installUrl: buildHubSpotInstallUrl({
+          config: hubspotState.hubspotConfig,
+          state: stateToken,
+          accountId
+        }),
+        state: stateToken,
+        accountId
+      });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/hubspot/oauth/callback") {
+      if (url.searchParams.get("error")) {
+        sendText(
+          response,
+          400,
+          "text/html; charset=utf-8",
+          `<html><body><h1>HubSpot OAuth failed</h1><p>${url.searchParams.get("error")}</p></body></html>`
+        );
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendText(
+          response,
+          500,
+          "text/html; charset=utf-8",
+          `<html><body><h1>HubSpot config unavailable</h1><p>${hubspotState.error}</p></body></html>`
+        );
+        return;
+      }
+
+      const code = url.searchParams.get("code");
+      if (!code) {
+        sendText(
+          response,
+          400,
+          "text/html; charset=utf-8",
+          "<html><body><h1>Missing OAuth code</h1><p>HubSpot did not return an authorization code.</p></body></html>"
+        );
+        return;
+      }
+
+      const installRecord = await exchangeHubSpotAuthCode({
+        config: hubspotState.hubspotConfig,
+        code
+      });
+      const nextInstallState = upsertHubSpotInstall(hubspotState.installState, installRecord);
+      saveJsonAtomic(hubspotInstallStatePath, nextInstallState);
+
+      sendText(
+        response,
+        200,
+        "text/html; charset=utf-8",
+        `<html><body><h1>HubSpot connected</h1><p>Portal ${installRecord.portalId || "unknown"} was stored locally.</p><p>You can close this window and return to Pipeline Rescue.</p></body></html>`
+      );
       return;
     }
 
@@ -600,6 +759,47 @@ const server = http.createServer(async (request, response) => {
       sendJson(response, 200, {
         config: refreshedProviderState.aiProviderConfig,
         status: refreshedProviderState.aiProviderStatus
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hubspot/config") {
+      const body = validateHubSpotConfigPayload(await readJsonBody(request));
+      saveJsonAtomic(hubspotConfigPath, body);
+      const refreshedHubSpotState = getHubSpotState();
+      sendJson(response, 200, {
+        config: refreshedHubSpotState.hubspotConfig,
+        status: refreshedHubSpotState.hubspotStatus
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hubspot/oauth/exchange") {
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot config unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const body = await readJsonBody(request);
+      const installRecord = await exchangeHubSpotAuthCode({
+        config: hubspotState.hubspotConfig,
+        code: body.code
+      });
+      const nextInstallState = upsertHubSpotInstall(hubspotState.installState, installRecord);
+      saveJsonAtomic(hubspotInstallStatePath, nextInstallState);
+      const refreshedHubSpotState = getHubSpotState();
+
+      sendJson(response, 200, {
+        install: {
+          portalId: installRecord.portalId,
+          hubDomain: installRecord.hubDomain,
+          connectedAt: installRecord.connectedAt,
+          scope: installRecord.scope
+        },
+        status: refreshedHubSpotState.hubspotStatus
       });
       return;
     }

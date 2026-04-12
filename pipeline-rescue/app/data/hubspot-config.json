@@ -1,0 +1,15 @@
+{
+  "enabled": false,
+  "clientId": "",
+  "clientSecretEnvVar": "HUBSPOT_CLIENT_SECRET",
+  "redirectUri": "http://localhost:4179/api/hubspot/oauth/callback",
+  "scopes": [
+    "oauth",
+    "crm.objects.deals.read",
+    "crm.objects.contacts.read",
+    "crm.objects.tasks.read",
+    "crm.objects.tasks.write"
+  ],
+  "optionalScopes": [],
+  "preferredAccountId": null
+}
