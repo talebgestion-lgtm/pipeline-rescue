@@ -17,7 +17,7 @@ const {
   validateHubSpotConfigPayload
 } = require("./lib/hubspot-oauth");
 const { loadEnvFile } = require("./lib/env-loader");
-const { createHubSpotRescueTask, loadHubSpotDealPreview } = require("./lib/hubspot-client");
+const { createHubSpotDraftNote, createHubSpotRescueTask, loadHubSpotDealPreview } = require("./lib/hubspot-client");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
 const rootDir = __dirname;
@@ -57,6 +57,103 @@ function stampMetaVersion(payload, version) {
   }
 
   return payload;
+}
+
+async function buildHubSpotLiveContext({ appState, hubspotState, portalId, dealId }) {
+  const preview = await loadHubSpotDealPreview({
+    config: hubspotState.hubspotConfig,
+    installState: hubspotState.installState,
+    portalId,
+    dealId,
+    analysisTimestamp: new Date().toISOString()
+  });
+
+  const liveFixtures = {
+    defaultScenario: "hubspot-live-preview",
+    stageExpectationsDays: appState.fixtures.stageExpectationsDays,
+    scenarios: {
+      "hubspot-live-preview": preview.scenario
+    }
+  };
+
+  const overview = stampMetaVersion(
+    buildOverview(liveFixtures, "hubspot-live-preview"),
+    appState.packageManifest.version
+  );
+  const dealAnalysis = stampMetaVersion(
+    buildDealAnalysis(liveFixtures, "hubspot-live-preview", preview.normalizedDeal.id),
+    appState.packageManifest.version
+  );
+
+  return {
+    preview,
+    overview,
+    dealAnalysis
+  };
+}
+
+async function resolveHubSpotLiveDraft({ aiProviderState, dealAnalysis }) {
+  if (!dealAnalysis || !dealAnalysis.analysis || !dealAnalysis.verification) {
+    const error = new Error("A live deal analysis is required before generating a HubSpot draft.");
+    error.statusCode = 500;
+    throw error;
+  }
+
+  if (!dealAnalysis.analysis.draft || !dealAnalysis.analysis.draft.eligible) {
+    const error = new Error(`Live draft is blocked by local guardrails: ${dealAnalysis.analysis.draft?.blockedReason || "UNSAFE"}.`);
+    error.statusCode = 409;
+    throw error;
+  }
+
+  if (
+    !aiProviderState.error
+    && aiProviderState.aiProviderStatus
+    && aiProviderState.aiProviderStatus.status === "READY"
+    && aiProviderState.aiProviderConfig
+    && aiProviderState.aiProviderConfig.allowLiveGeneration
+  ) {
+    try {
+      const liveDraft = await generateLiveDraft({
+        config: aiProviderState.aiProviderConfig,
+        analysis: dealAnalysis.analysis,
+        verification: dealAnalysis.verification
+      });
+
+      return {
+        mode: "PROVIDER_LIVE",
+        provider: liveDraft.provider,
+        model: liveDraft.model,
+        responseId: liveDraft.responseId || null,
+        usage: liveDraft.usage || null,
+        draft: liveDraft.draft
+      };
+    } catch (error) {
+      return {
+        mode: "DETERMINISTIC_FALLBACK",
+        provider: null,
+        model: null,
+        responseId: null,
+        usage: null,
+        detail: error.detail || error.message,
+        draft: {
+          subject: dealAnalysis.analysis.draft.subject,
+          body: dealAnalysis.analysis.draft.body
+        }
+      };
+    }
+  }
+
+  return {
+    mode: "DETERMINISTIC_LOCAL",
+    provider: null,
+    model: null,
+    responseId: null,
+    usage: null,
+    draft: {
+      subject: dealAnalysis.analysis.draft.subject,
+      body: dealAnalysis.analysis.draft.body
+    }
+  };
 }
 
 function sendFile(response, filePath, extraHeaders = {}) {
@@ -479,34 +576,17 @@ const server = http.createServer(async (request, response) => {
         return;
       }
 
-      const preview = await loadHubSpotDealPreview({
-        config: hubspotState.hubspotConfig,
-        installState: hubspotState.installState,
+      const liveContext = await buildHubSpotLiveContext({
+        appState,
+        hubspotState,
         portalId: url.searchParams.get("portalId") || null,
-        dealId: hubspotLiveDealMatch[1],
-        analysisTimestamp: new Date().toISOString()
+        dealId: hubspotLiveDealMatch[1]
       });
+      const { preview, overview, dealAnalysis } = liveContext;
 
       if (preview.source.tokenRefreshed) {
         saveJsonAtomic(hubspotInstallStatePath, preview.installState);
       }
-
-      const liveFixtures = {
-        defaultScenario: "hubspot-live-preview",
-        stageExpectationsDays: appState.fixtures.stageExpectationsDays,
-        scenarios: {
-          "hubspot-live-preview": preview.scenario
-        }
-      };
-
-      const overview = stampMetaVersion(
-        buildOverview(liveFixtures, "hubspot-live-preview"),
-        appState.packageManifest.version
-      );
-      const dealAnalysis = stampMetaVersion(
-        buildDealAnalysis(liveFixtures, "hubspot-live-preview", preview.normalizedDeal.id),
-        appState.packageManifest.version
-      );
 
       sendJson(response, 200, {
         source: preview.source,
@@ -537,26 +617,13 @@ const server = http.createServer(async (request, response) => {
         return;
       }
 
-      const preview = await loadHubSpotDealPreview({
-        config: hubspotState.hubspotConfig,
-        installState: hubspotState.installState,
+      const liveContext = await buildHubSpotLiveContext({
+        appState,
+        hubspotState,
         portalId: url.searchParams.get("portalId") || null,
-        dealId: hubspotLiveTaskMatch[1],
-        analysisTimestamp: new Date().toISOString()
+        dealId: hubspotLiveTaskMatch[1]
       });
-
-      const liveFixtures = {
-        defaultScenario: "hubspot-live-preview",
-        stageExpectationsDays: appState.fixtures.stageExpectationsDays,
-        scenarios: {
-          "hubspot-live-preview": preview.scenario
-        }
-      };
-
-      const dealAnalysis = stampMetaVersion(
-        buildDealAnalysis(liveFixtures, "hubspot-live-preview", preview.normalizedDeal.id),
-        appState.packageManifest.version
-      );
+      const { preview, dealAnalysis } = liveContext;
 
       const taskWrite = await createHubSpotRescueTask({
         config: hubspotState.hubspotConfig,
@@ -578,6 +645,106 @@ const server = http.createServer(async (request, response) => {
         graph: preview.graph,
         dealAnalysis,
         hubspotTask: taskWrite.task
+      });
+      return;
+    }
+
+    const hubspotLiveDraftMatch = url.pathname.match(/^\/api\/hubspot\/live\/deals\/([^/]+)\/draft$/);
+    if (request.method === "POST" && hubspotLiveDraftMatch) {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live draft generation unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live draft unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const liveContext = await buildHubSpotLiveContext({
+        appState,
+        hubspotState,
+        portalId: url.searchParams.get("portalId") || null,
+        dealId: hubspotLiveDraftMatch[1]
+      });
+      const { preview, dealAnalysis } = liveContext;
+      const draftResult = await resolveHubSpotLiveDraft({
+        aiProviderState,
+        dealAnalysis
+      });
+
+      if (preview.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, preview.installState);
+      }
+
+      sendJson(response, 200, {
+        source: preview.source,
+        normalizedDeal: preview.normalizedDeal,
+        normalizationWarnings: preview.normalizationWarnings,
+        graph: preview.graph,
+        dealAnalysis,
+        liveDraft: draftResult
+      });
+      return;
+    }
+
+    const hubspotLiveNoteMatch = url.pathname.match(/^\/api\/hubspot\/live\/deals\/([^/]+)\/notes$/);
+    if (request.method === "POST" && hubspotLiveNoteMatch) {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live note creation unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live note creation unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const liveContext = await buildHubSpotLiveContext({
+        appState,
+        hubspotState,
+        portalId: url.searchParams.get("portalId") || null,
+        dealId: hubspotLiveNoteMatch[1]
+      });
+      const { preview, dealAnalysis } = liveContext;
+      const draftResult = await resolveHubSpotLiveDraft({
+        aiProviderState,
+        dealAnalysis
+      });
+      const noteWrite = await createHubSpotDraftNote({
+        config: hubspotState.hubspotConfig,
+        installState: preview.installState,
+        portalId: url.searchParams.get("portalId") || preview.source.portalId || null,
+        analysisTimestamp: preview.source.fetchedAt,
+        preview,
+        analysis: dealAnalysis,
+        draftResult
+      });
+
+      if (preview.source.tokenRefreshed || noteWrite.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, noteWrite.installState);
+      }
+
+      sendJson(response, 200, {
+        source: preview.source,
+        normalizedDeal: preview.normalizedDeal,
+        normalizationWarnings: preview.normalizationWarnings,
+        graph: preview.graph,
+        dealAnalysis,
+        liveDraft: draftResult,
+        hubspotNote: noteWrite.note
       });
       return;
     }

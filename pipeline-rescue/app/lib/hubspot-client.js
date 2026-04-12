@@ -73,6 +73,9 @@ function createExpiresAt(expiresIn, now = new Date()) {
 }
 
 const HUBSPOT_ASSOCIATION_TYPE_IDS = {
+  NOTE_TO_CONTACT: 202,
+  NOTE_TO_COMPANY: 190,
+  NOTE_TO_DEAL: 214,
   TASK_TO_CONTACT: 204,
   TASK_TO_COMPANY: 192,
   TASK_TO_DEAL: 216
@@ -509,6 +512,10 @@ function createTaskDueAt(referenceTimestamp) {
   return new Date(reference.getTime() + (24 * 60 * 60 * 1000)).toISOString();
 }
 
+function createNoteTimestamp(referenceTimestamp) {
+  return new Date(referenceTimestamp || Date.now()).toISOString();
+}
+
 function buildTaskAssociations(preview) {
   const associations = [];
 
@@ -543,6 +550,48 @@ function buildTaskAssociations(preview) {
         {
           associationCategory: "HUBSPOT_DEFINED",
           associationTypeId: HUBSPOT_ASSOCIATION_TYPE_IDS.TASK_TO_CONTACT
+        }
+      ]
+    });
+  }
+
+  return associations;
+}
+
+function buildNoteAssociations(preview) {
+  const associations = [];
+
+  if (preview.graph && preview.graph.deal && preview.graph.deal.id) {
+    associations.push({
+      to: { id: String(preview.graph.deal.id) },
+      types: [
+        {
+          associationCategory: "HUBSPOT_DEFINED",
+          associationTypeId: HUBSPOT_ASSOCIATION_TYPE_IDS.NOTE_TO_DEAL
+        }
+      ]
+    });
+  }
+
+  for (const company of preview.graph?.companies || []) {
+    associations.push({
+      to: { id: String(company.id) },
+      types: [
+        {
+          associationCategory: "HUBSPOT_DEFINED",
+          associationTypeId: HUBSPOT_ASSOCIATION_TYPE_IDS.NOTE_TO_COMPANY
+        }
+      ]
+    });
+  }
+
+  for (const contact of preview.graph?.contacts || []) {
+    associations.push({
+      to: { id: String(contact.id) },
+      types: [
+        {
+          associationCategory: "HUBSPOT_DEFINED",
+          associationTypeId: HUBSPOT_ASSOCIATION_TYPE_IDS.NOTE_TO_CONTACT
         }
       ]
     });
@@ -734,7 +783,81 @@ async function createHubSpotRescueTask(options) {
   };
 }
 
+function buildHubSpotNotePayload({ preview, analysis, draftResult, noteAt }) {
+  const analysisPayload = analysis && analysis.analysis ? analysis.analysis : null;
+  const verification = analysis && analysis.verification ? analysis.verification : null;
+  const draft = draftResult && draftResult.draft ? draftResult.draft : null;
+
+  if (!analysisPayload || !verification) {
+    throw createHubSpotClientError("A validated live analysis is required before writing a HubSpot note.", 500);
+  }
+
+  if (!draft || typeof draft.subject !== "string" || typeof draft.body !== "string") {
+    throw createHubSpotClientError("A usable draft is required before writing a HubSpot note.", 409);
+  }
+
+  const ownerId = preview.normalizedDeal && /^\d+$/.test(String(preview.normalizedDeal.owner?.id || ""))
+    ? String(preview.normalizedDeal.owner.id)
+    : null;
+
+  const bodyLines = [
+    "<strong>Pipeline Rescue follow-up draft</strong>",
+    `Draft mode: ${draftResult.mode || "UNKNOWN"}`,
+    `Verification status: ${verification.validationStatus}`,
+    typeof analysisPayload.rescueScore === "number" ? `Rescue score: ${analysisPayload.rescueScore}` : null,
+    `Subject: ${draft.subject}`,
+    "",
+    draft.body
+  ].filter((item) => item != null);
+
+  return {
+    properties: {
+      hs_timestamp: noteAt || createNoteTimestamp(preview.source?.fetchedAt),
+      hs_note_body: bodyLines.join("\n"),
+      ...(ownerId ? { hubspot_owner_id: ownerId } : {})
+    },
+    associations: buildNoteAssociations(preview)
+  };
+}
+
+async function createHubSpotDraftNote(options) {
+  const liveSession = await createLiveRequestSession(options);
+  const preview = options.preview;
+  if (!preview || !preview.graph || !preview.graph.deal || !preview.graph.deal.id) {
+    throw createHubSpotClientError("A live HubSpot preview is required before creating a HubSpot note.", 500);
+  }
+
+  const payload = buildHubSpotNotePayload({
+    preview,
+    analysis: options.analysis,
+    draftResult: options.draftResult,
+    noteAt: options.noteAt || null
+  });
+
+  const result = await liveSession.requestWithRefresh("/crm/v3/objects/notes", "POST", payload);
+  const properties = result.properties || payload.properties;
+
+  return {
+    source: {
+      portalId: liveSession.getInstall().portalId,
+      hubDomain: liveSession.getInstall().hubDomain || null,
+      tokenRefreshed: liveSession.getTokenRefreshed(),
+      writtenAt: new Date().toISOString()
+    },
+    note: {
+      noteId: String(result.id),
+      body: properties.hs_note_body || payload.properties.hs_note_body,
+      ownerId: properties.hubspot_owner_id || payload.properties.hubspot_owner_id || null,
+      associatedDealId: preview.graph.deal.id,
+      associatedCompanyCount: (preview.graph.companies || []).length,
+      associatedContactCount: (preview.graph.contacts || []).length
+    },
+    installState: liveSession.getInstallState()
+  };
+}
+
 module.exports = {
+  createHubSpotDraftNote,
   createHubSpotRescueTask,
   loadHubSpotDealPreview
 };

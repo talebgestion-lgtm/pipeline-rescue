@@ -84,5 +84,6 @@ It now has:
 - HubSpot OAuth config, install URL, and local install persistence
 - live HubSpot deal preview with local token refresh and deterministic normalization
 - live HubSpot task write-back from the deterministic rescue recommendation
+- live HubSpot draft generation and note write-back for CRM-side execution traces
 - imported anti-memory and anti-hallucination guardrails translated into product rules
 - strict GDPR deployment gate and operational compliance template

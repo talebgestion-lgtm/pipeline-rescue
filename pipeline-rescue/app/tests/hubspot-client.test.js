@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { createHubSpotRescueTask, loadHubSpotDealPreview } = require("../lib/hubspot-client");
+const { createHubSpotDraftNote, createHubSpotRescueTask, loadHubSpotDealPreview } = require("../lib/hubspot-client");
 
 const validConfig = {
   enabled: true,
@@ -424,5 +424,112 @@ test("createHubSpotRescueTask blocks when live analysis is unverified", async ()
       fetchImpl: async () => createJsonResponse(200, {})
     }),
     /not trusted enough/
+  );
+});
+
+test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", async () => {
+  const preview = {
+    source: {
+      fetchedAt: "2026-04-12T10:00:00Z"
+    },
+    graph: {
+      deal: { id: "987" },
+      companies: [{ id: "301", name: "Acme" }],
+      contacts: [{ id: "201", name: "Maya Brooks", email: "maya@acme.example" }]
+    },
+    normalizedDeal: {
+      owner: { id: "44" }
+    }
+  };
+
+  const result = await createHubSpotDraftNote({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          accessToken: "access_token",
+          refreshToken: "refresh_token",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    portalId: "123456",
+    preview,
+    analysis: {
+      analysis: {
+        dealId: "987",
+        dealName: "Acme Expansion",
+        rescueScore: 86
+      },
+      verification: {
+        validationStatus: "VALIDATED"
+      }
+    },
+    draftResult: {
+      mode: "DETERMINISTIC_LOCAL",
+      draft: {
+        subject: "Quick follow-up on Acme Expansion",
+        body: "Hi Maya, can we confirm the next step tomorrow?"
+      }
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/notes") {
+        const body = JSON.parse(options.body);
+        assert.equal(body.associations.length, 3);
+        assert.equal(body.associations[0].types[0].associationTypeId, 214);
+        assert.equal(body.associations[1].types[0].associationTypeId, 190);
+        assert.equal(body.associations[2].types[0].associationTypeId, 202);
+        assert.match(body.properties.hs_note_body, /Pipeline Rescue follow-up draft/);
+        assert.match(body.properties.hs_note_body, /Quick follow-up on Acme Expansion/);
+
+        return createJsonResponse(201, {
+          id: "note_7001",
+          properties: body.properties
+        });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.equal(result.note.noteId, "note_7001");
+  assert.equal(result.note.associatedDealId, "987");
+  assert.equal(result.note.associatedCompanyCount, 1);
+  assert.equal(result.note.associatedContactCount, 1);
+});
+
+test("createHubSpotDraftNote blocks when no draft payload is available", async () => {
+  await assert.rejects(
+    () => createHubSpotDraftNote({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: { deal: { id: "987" }, companies: [], contacts: [] },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: { dealId: "987" },
+        verification: { validationStatus: "VALIDATED" }
+      },
+      draftResult: null,
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async () => createJsonResponse(200, {})
+    }),
+    /usable draft/
   );
 });

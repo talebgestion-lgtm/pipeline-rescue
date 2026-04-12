@@ -97,6 +97,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/hubspot/oauth/callback`
 - `/api/hubspot/live/deals/123456?portalId=999999`
 - `POST /api/hubspot/live/deals/123456/tasks?portalId=999999`
+- `POST /api/hubspot/live/deals/123456/draft?portalId=999999`
+- `POST /api/hubspot/live/deals/123456/notes?portalId=999999`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -130,6 +132,8 @@ The UI now supports:
 - a HubSpot OAuth config panel, install URL generator, and manual code exchange path
 - a live HubSpot deal preview path with token refresh and deterministic normalization
 - a live HubSpot task write path tied to the deterministic rescue recommendation
+- a live HubSpot draft path with provider-live or deterministic fallback
+- a live HubSpot note write path to persist the follow-up draft on the CRM record
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -201,6 +205,8 @@ HubSpot endpoints:
 - `GET /api/hubspot/oauth/callback`
 - `GET /api/hubspot/live/deals/:dealId?portalId=...`
 - `POST /api/hubspot/live/deals/:dealId/tasks?portalId=...`
+- `POST /api/hubspot/live/deals/:dealId/draft?portalId=...`
+- `POST /api/hubspot/live/deals/:dealId/notes?portalId=...`
 
 Compliance endpoint:
 
@@ -247,3 +253,5 @@ For HubSpot OAuth:
 4. complete the install flow or paste the returned code for manual exchange
 5. use `Load Live Deal Preview` with a real HubSpot deal ID to validate the live normalization path
 6. use `Create Live HubSpot Task` only after validating the live preview and recommendation
+7. use `Generate Live HubSpot Draft` to get either a provider-live draft or a deterministic fallback
+8. use `Save Draft As HubSpot Note` to persist the current rescue draft on the HubSpot record

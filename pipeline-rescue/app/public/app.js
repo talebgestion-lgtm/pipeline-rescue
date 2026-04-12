@@ -108,6 +108,20 @@ async function createHubSpotLiveTask(portalId, dealId) {
   });
 }
 
+async function createHubSpotLiveDraft(portalId, dealId) {
+  const query = portalId ? `?portalId=${encodeURIComponent(portalId)}` : "";
+  return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}/draft${query}`, {
+    method: "POST"
+  });
+}
+
+async function createHubSpotLiveNote(portalId, dealId) {
+  const query = portalId ? `?portalId=${encodeURIComponent(portalId)}` : "";
+  return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}/notes${query}`, {
+    method: "POST"
+  });
+}
+
 async function probeProvider() {
   return fetchJson("/api/ai/provider-probe", {
     method: "POST"
@@ -943,6 +957,8 @@ function renderHubSpotLivePreview(preview) {
   const tasks = preview.graph?.tasks || [];
   const warnings = preview.normalizationWarnings || [];
   const liveTask = preview.hubspotTask || null;
+  const liveDraft = preview.liveDraft || null;
+  const hubspotNote = preview.hubspotNote || null;
 
   container.innerHTML = `
     <div class="verification-grid">
@@ -993,6 +1009,17 @@ function renderHubSpotLivePreview(preview) {
         ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
       </ul>
     </div>
+    ${liveDraft ? `
+      <div class="verification-block">
+        <p class="score-label">Live draft</p>
+        <ul class="verification-list">
+          <li>${escapeHtml(liveDraft.mode || "UNKNOWN")} ${liveDraft.provider ? `| ${escapeHtml(liveDraft.provider)} | ${escapeHtml(liveDraft.model || "unknown model")}` : ""}</li>
+          ${liveDraft.detail ? `<li>${escapeHtml(liveDraft.detail)}</li>` : ""}
+          <li>${escapeHtml(liveDraft.draft?.subject || "No draft subject")}</li>
+          <li>${escapeHtml(liveDraft.draft?.body || "No draft body")}</li>
+        </ul>
+      </div>
+    ` : ""}
     ${liveTask ? `
       <div class="verification-block">
         <p class="score-label">Last live HubSpot task write</p>
@@ -1000,6 +1027,15 @@ function renderHubSpotLivePreview(preview) {
           <li>${escapeHtml(liveTask.taskId)} | ${escapeHtml(liveTask.subject)}</li>
           <li>${escapeHtml(liveTask.status)} | ${escapeHtml(liveTask.priority)} | ${escapeHtml(liveTask.taskType)}</li>
           <li>${liveTask.dueAt ? escapeHtml(new Date(liveTask.dueAt).toLocaleString("en-GB")) : "No due date"} | contacts ${liveTask.associatedContactCount} | companies ${liveTask.associatedCompanyCount}</li>
+        </ul>
+      </div>
+    ` : ""}
+    ${hubspotNote ? `
+      <div class="verification-block">
+        <p class="score-label">Last live HubSpot note write</p>
+        <ul class="verification-list">
+          <li>${escapeHtml(hubspotNote.noteId)} | contacts ${hubspotNote.associatedContactCount} | companies ${hubspotNote.associatedCompanyCount}</li>
+          <li>${escapeHtml(hubspotNote.body)}</li>
         </ul>
       </div>
     ` : ""}
@@ -1633,6 +1669,67 @@ async function handleHubSpotLiveTaskClick() {
   }
 }
 
+async function handleHubSpotLiveDraftClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const dealId = document.getElementById("hubspot-live-deal-input").value.trim();
+
+    if (!dealId) {
+      throw new Error("A HubSpot deal ID is required for live draft generation.");
+    }
+
+    const response = await createHubSpotLiveDraft(portalId || "", dealId);
+    appState.hubspotLivePreview = {
+      source: response.source,
+      normalizedDeal: response.normalizedDeal,
+      normalizationWarnings: response.normalizationWarnings,
+      graph: response.graph,
+      dealAnalysis: response.dealAnalysis,
+      liveDraft: response.liveDraft
+    };
+    renderHubSpotLivePreview(appState.hubspotLivePreview);
+    await refreshHubSpot();
+    await refreshAiProvider();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-preview").innerHTML = `
+      <p class="score-label">Live draft failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
+async function handleHubSpotLiveNoteClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const dealId = document.getElementById("hubspot-live-deal-input").value.trim();
+
+    if (!dealId) {
+      throw new Error("A HubSpot deal ID is required for live note creation.");
+    }
+
+    const response = await createHubSpotLiveNote(portalId || "", dealId);
+    appState.hubspotLivePreview = {
+      source: response.source,
+      normalizedDeal: response.normalizedDeal,
+      normalizationWarnings: response.normalizationWarnings,
+      graph: response.graph,
+      dealAnalysis: response.dealAnalysis,
+      liveDraft: response.liveDraft,
+      hubspotNote: response.hubspotNote
+    };
+    renderHubSpotLivePreview(appState.hubspotLivePreview);
+    await refreshHubSpot();
+    await refreshAiProvider();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-preview").innerHTML = `
+      <p class="score-label">Live note write failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
 async function handleProbeAiProviderClick() {
   try {
     appState.providerProbe = await probeProvider();
@@ -1778,6 +1875,8 @@ async function main() {
   const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
   const hubSpotLivePreviewButton = document.getElementById("hubspot-live-preview-button");
   const hubSpotLiveTaskButton = document.getElementById("hubspot-live-task-button");
+  const hubSpotLiveDraftButton = document.getElementById("hubspot-live-draft-button");
+  const hubSpotLiveNoteButton = document.getElementById("hubspot-live-note-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1838,6 +1937,8 @@ async function main() {
     exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
     hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
     hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
+    hubSpotLiveDraftButton.addEventListener("click", handleHubSpotLiveDraftClick);
+    hubSpotLiveNoteButton.addEventListener("click", handleHubSpotLiveNoteClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
