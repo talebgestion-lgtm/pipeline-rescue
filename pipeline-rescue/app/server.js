@@ -11,6 +11,7 @@ const {
   validateLiveQueueRequestPayload
 } = require("./lib/hubspot-live-queue");
 const { validateLiveSearchPayload } = require("./lib/hubspot-live-search");
+const { executeLiveRescueRun, validateLiveRescueRunPayload } = require("./lib/hubspot-live-rescue-run");
 const { createAiControlReport, validateAiPolicyPayload } = require("./lib/ai-control");
 const { createAiOperationsCycle } = require("./lib/ai-operations");
 const { createAiProviderStatus, validateAiProviderConfigPayload } = require("./lib/ai-provider");
@@ -198,6 +199,55 @@ function buildEmptyHubSpotLiveQueueResponse({ appState, source, criteria }) {
     overview,
     deals: [],
     managerDigest: createLiveQueueManagerDigest(overview, [])
+  };
+}
+
+async function buildHubSpotLiveSearchResponse({ appState, hubspotState, criteria }) {
+  const liveSearch = await searchHubSpotDeals({
+    config: hubspotState.hubspotConfig,
+    installState: hubspotState.installState,
+    portalId: criteria.portalId || null,
+    criteria
+  });
+
+  if (liveSearch.dealIds.length === 0) {
+    return {
+      response: buildEmptyHubSpotLiveQueueResponse({
+        appState,
+        source: liveSearch.source,
+        criteria: liveSearch.criteria
+      }),
+      installState: liveSearch.installState,
+      tokenRefreshed: Boolean(liveSearch.source.tokenRefreshed)
+    };
+  }
+
+  const liveQueue = await buildHubSpotLiveQueueContext({
+    appState,
+    hubspotState: {
+      ...hubspotState,
+      installState: liveSearch.installState
+    },
+    portalId: criteria.portalId || null,
+    dealIds: liveSearch.dealIds
+  });
+
+  liveQueue.source.mode = "HUBSPOT_LIVE_SEARCH";
+  liveQueue.source.tokenRefreshed = Boolean(liveQueue.source.tokenRefreshed || liveSearch.source.tokenRefreshed);
+  liveQueue.source.portalId = liveQueue.source.portalId || liveSearch.source.portalId;
+  liveQueue.source.hubDomain = liveQueue.source.hubDomain || liveSearch.source.hubDomain || null;
+
+  return {
+    response: {
+      criteria: liveSearch.criteria,
+      discoveredDealIds: liveSearch.dealIds,
+      source: liveQueue.source,
+      overview: liveQueue.overview,
+      deals: liveQueue.deals,
+      managerDigest: liveQueue.managerDigest
+    },
+    installState: liveQueue.installState,
+    tokenRefreshed: Boolean(liveQueue.source.tokenRefreshed)
   };
 }
 
@@ -859,52 +909,107 @@ const server = http.createServer(async (request, response) => {
       }
 
       const body = validateLiveSearchPayload(await readJsonBody(request));
-      const liveSearch = await searchHubSpotDeals({
-        config: hubspotState.hubspotConfig,
-        installState: hubspotState.installState,
-        portalId: body.portalId || null,
+      const liveSearchResponse = await buildHubSpotLiveSearchResponse({
+        appState,
+        hubspotState,
         criteria: body
       });
 
-      if (liveSearch.dealIds.length === 0) {
-        if (liveSearch.source.tokenRefreshed) {
-          saveJsonAtomic(hubspotInstallStatePath, liveSearch.installState);
-        }
+      if (liveSearchResponse.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, liveSearchResponse.installState);
+      }
 
-        sendJson(response, 200, buildEmptyHubSpotLiveQueueResponse({
-          appState,
-          source: liveSearch.source,
-          criteria: liveSearch.criteria
-        }));
+      sendJson(response, 200, liveSearchResponse.response);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/hubspot/live/rescue-run") {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live rescue run unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
         return;
       }
 
-      const liveQueue = await buildHubSpotLiveQueueContext({
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live rescue run unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const body = validateLiveRescueRunPayload(await readJsonBody(request));
+      const liveSearchResponse = await buildHubSpotLiveSearchResponse({
         appState,
-        hubspotState: {
-          ...hubspotState,
-          installState: liveSearch.installState
-        },
-        portalId: body.portalId || null,
-        dealIds: liveSearch.dealIds
+        hubspotState,
+        criteria: body
       });
 
-      liveQueue.source.mode = "HUBSPOT_LIVE_SEARCH";
-      liveQueue.source.tokenRefreshed = Boolean(liveQueue.source.tokenRefreshed || liveSearch.source.tokenRefreshed);
-      liveQueue.source.portalId = liveQueue.source.portalId || liveSearch.source.portalId;
-      liveQueue.source.hubDomain = liveQueue.source.hubDomain || liveSearch.source.hubDomain || null;
+      if (Array.isArray(liveSearchResponse.response.deals) && liveSearchResponse.response.deals.length === 0) {
+        if (liveSearchResponse.tokenRefreshed) {
+          saveJsonAtomic(hubspotInstallStatePath, liveSearchResponse.installState);
+        }
 
-      if (liveQueue.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, liveQueue.installState);
+        sendJson(response, 200, {
+          criteria: body,
+          discoveredDealIds: [],
+          source: {
+            ...liveSearchResponse.response.source,
+            mode: "HUBSPOT_LIVE_RESCUE_RUN",
+            writtenTaskCount: 0
+          },
+          overview: liveSearchResponse.response.overview,
+          managerDigest: [
+            ...liveSearchResponse.response.managerDigest,
+            "No live deal matched the current rescue criteria, so no HubSpot task was written."
+          ],
+          decisions: [],
+          writtenTasks: [],
+          metrics: {
+            discoveredDeals: 0,
+            queuedDeals: 0,
+            writtenTasks: 0,
+            blockedDeals: 0,
+            skippedDeals: 0,
+            failedWrites: 0,
+            eligibleDeals: 0
+          }
+        });
+        return;
+      }
+
+      const rescueRun = await executeLiveRescueRun({
+        liveQueue: {
+          ...liveSearchResponse.response,
+          installState: liveSearchResponse.installState
+        },
+        criteria: body,
+        portalId: body.portalId || null,
+        taskWriter: async ({ installState, portalId, preview, analysis }) => createHubSpotRescueTask({
+          config: hubspotState.hubspotConfig,
+          installState,
+          portalId,
+          analysisTimestamp: preview.source?.fetchedAt || new Date().toISOString(),
+          preview,
+          analysis
+        })
+      });
+
+      if (rescueRun.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, rescueRun.installState);
       }
 
       sendJson(response, 200, {
-        criteria: liveSearch.criteria,
-        discoveredDealIds: liveSearch.dealIds,
-        source: liveQueue.source,
-        overview: liveQueue.overview,
-        deals: liveQueue.deals,
-        managerDigest: liveQueue.managerDigest
+        criteria: body,
+        discoveredDealIds: liveSearchResponse.response.discoveredDealIds || [],
+        source: rescueRun.source,
+        overview: rescueRun.overview,
+        managerDigest: rescueRun.managerDigest,
+        decisions: rescueRun.decisions,
+        writtenTasks: rescueRun.writtenTasks,
+        metrics: rescueRun.metrics
       });
       return;
     }

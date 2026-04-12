@@ -85,6 +85,7 @@ It now has:
 - live HubSpot deal preview with local token refresh and deterministic normalization
 - live HubSpot stale-deal discovery by CRM criteria
 - live HubSpot multi-deal queue for manager rescue review
+- live HubSpot rescue batch execution for validated at-risk tasks
 - live HubSpot task write-back from the deterministic rescue recommendation
 - live HubSpot draft generation and note write-back for CRM-side execution traces
 - imported anti-memory and anti-hallucination guardrails translated into product rules

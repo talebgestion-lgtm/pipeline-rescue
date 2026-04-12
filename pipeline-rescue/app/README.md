@@ -97,6 +97,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/hubspot/oauth/callback`
 - `/api/hubspot/live/deals/123456?portalId=999999`
 - `POST /api/hubspot/live/search`
+- `POST /api/hubspot/live/rescue-run`
 - `POST /api/hubspot/live/queue`
 - `POST /api/hubspot/live/deals/123456/tasks?portalId=999999`
 - `POST /api/hubspot/live/deals/123456/draft?portalId=999999`
@@ -135,6 +136,7 @@ The UI now supports:
 - a live HubSpot deal preview path with token refresh and deterministic normalization
 - a live HubSpot criteria-discovery path to find stale deals without manually collecting IDs
 - a live HubSpot multi-deal queue path for manager-level rescue review
+- a live HubSpot rescue batch path that writes only validated at-risk tasks from the discovered queue
 - a live HubSpot task write path tied to the deterministic rescue recommendation
 - a live HubSpot draft path with provider-live or deterministic fallback
 - a live HubSpot note write path to persist the follow-up draft on the CRM record
@@ -208,6 +210,7 @@ HubSpot endpoints:
 - `POST /api/hubspot/oauth/exchange`
 - `GET /api/hubspot/oauth/callback`
 - `POST /api/hubspot/live/search`
+- `POST /api/hubspot/live/rescue-run`
 - `POST /api/hubspot/live/queue`
 - `GET /api/hubspot/live/deals/:dealId?portalId=...`
 - `POST /api/hubspot/live/deals/:dealId/tasks?portalId=...`
@@ -259,6 +262,8 @@ For HubSpot OAuth:
 4. complete the install flow or paste the returned code for manual exchange
 5. use `Load Live Deal Preview` with a real HubSpot deal ID to validate the live normalization path
 6. use `Load Live HubSpot Queue` with several deal IDs to inspect a real at-risk queue
-7. use `Create Live HubSpot Task` only after validating the live preview and recommendation
-8. use `Generate Live HubSpot Draft` to get either a provider-live draft or a deterministic fallback
-9. use `Save Draft As HubSpot Note` to persist the current rescue draft on the HubSpot record
+7. use `Discover Live Queue By Criteria` to pull stale live deals directly from HubSpot
+8. use `Run Live Rescue Tasks` to create only validated at-risk HubSpot tasks from the discovered queue
+9. use `Create Live HubSpot Task` only after validating the live preview and recommendation
+10. use `Generate Live HubSpot Draft` to get either a provider-live draft or a deterministic fallback
+11. use `Save Draft As HubSpot Note` to persist the current rescue draft on the HubSpot record

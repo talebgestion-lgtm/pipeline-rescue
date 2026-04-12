@@ -236,11 +236,14 @@
             <input id="hubspot-live-search-stale-days-input" class="scenario-select" type="number" min="0" max="365" value="7">
             <label class="score-label" for="hubspot-live-search-limit-input">Discovery limit</label>
             <input id="hubspot-live-search-limit-input" class="scenario-select" type="number" min="1" max="25" value="5">
+            <label class="score-label" for="hubspot-live-max-writes-input">Max live task writes per batch</label>
+            <input id="hubspot-live-max-writes-input" class="scenario-select" type="number" min="1" max="25" value="3">
           </div>
           <div class="feedback-export-actions">
             <button type="button" class="refresh-button" id="hubspot-live-preview-button">Load Live Deal Preview</button>
             <button type="button" class="refresh-button" id="hubspot-live-queue-button">Load Live HubSpot Queue</button>
             <button type="button" class="refresh-button" id="hubspot-live-search-button">Discover Live Queue By Criteria</button>
+            <button type="button" class="refresh-button" id="hubspot-live-rescue-run-button">Run Live Rescue Tasks</button>
             <button type="button" class="refresh-button" id="hubspot-live-draft-button">Generate Live HubSpot Draft</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-task-button">Create Live HubSpot Task</button>
             <button type="button" class="refresh-button secondary-button" id="hubspot-live-note-button">Save Draft As HubSpot Note</button>
@@ -252,6 +255,10 @@
           <div class="verification-card" id="hubspot-live-queue">
             <p class="score-label">Live queue</p>
             <p class="verification-note">No live HubSpot queue loaded yet.</p>
+          </div>
+          <div class="verification-card" id="hubspot-live-rescue-report">
+            <p class="score-label">Live rescue batch</p>
+            <p class="verification-note">No live rescue batch has been run yet.</p>
           </div>
 
           <header class="panel-header">
