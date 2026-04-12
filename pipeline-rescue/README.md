@@ -85,6 +85,7 @@ It now has:
 - live HubSpot deal preview with local token refresh and deterministic normalization
 - live HubSpot owner-name enrichment from the Owners API with safe fallback
 - idempotent live HubSpot task writes that avoid duplicate open rescue tasks
+- bounded HubSpot retry handling for transient `429` and `5xx` failures
 - live HubSpot stale-deal discovery by CRM criteria
 - live HubSpot multi-deal queue for manager rescue review
 - live HubSpot rescue batch execution for validated at-risk tasks

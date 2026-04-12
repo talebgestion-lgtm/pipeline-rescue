@@ -17,10 +17,19 @@ const validConfig = {
   preferredAccountId: null
 };
 
-function createJsonResponse(status, payload) {
+function createJsonResponse(status, payload, headers = {}) {
+  const normalizedHeaders = new Map(
+    Object.entries(headers).map(([key, value]) => [String(key).toLowerCase(), String(value)])
+  );
+
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: {
+      get(name) {
+        return normalizedHeaders.get(String(name).toLowerCase()) || null;
+      }
+    },
     json: async () => payload
   };
 }
@@ -276,6 +285,86 @@ test("loadHubSpotDealPreview refreshes the access token when the stored token is
   assert.equal(preview.source.tokenRefreshed, true);
   assert.equal(preview.installState.installs[0].accessToken, "fresh_token");
   assert.equal(preview.normalizedDeal.owner.name, "Fresh Owner");
+});
+
+test("loadHubSpotDealPreview retries a transient HubSpot rate limit before succeeding", async () => {
+  let dealAttempts = 0;
+  const observedSleeps = [];
+
+  const preview = await loadHubSpotDealPreview({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          hubDomain: "demo.hubspot.com",
+          accessToken: "access_token",
+          refreshToken: "refresh_token",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    dealId: "987",
+    portalId: "123456",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    env: {
+      HUBSPOT_CLIENT_SECRET: "secret"
+    },
+    sleepImpl: async (delayMs) => {
+      observedSleeps.push(delayMs);
+    },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/objects/deals/987") {
+        dealAttempts += 1;
+        if (dealAttempts === 1) {
+          return createJsonResponse(429, { message: "rate limit" }, { "Retry-After": "0" });
+        }
+
+        return createJsonResponse(200, {
+          id: "987",
+          createdAt: "2026-03-01T10:00:00Z",
+          updatedAt: "2026-04-10T10:00:00Z",
+          archived: false,
+          properties: {
+            dealname: "Acme Expansion",
+            amount: "48000",
+            closedate: "2026-05-10",
+            dealstage: "proposal",
+            pipeline: "default",
+            hubspot_owner_id: "44",
+            hs_lastactivitydate: "2026-03-24T10:00:00Z"
+          }
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/owners/44") {
+        return createJsonResponse(200, {
+          id: "44",
+          email: "owner@demo.hubspot.com",
+          firstName: "Retry",
+          lastName: "Owner",
+          archived: false
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname.startsWith("/crm/v4/objects/deals/987/associations/")) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      if (options.method === "POST" && /\/crm\/v3\/objects\/(contacts|companies|tasks)\/batch\/read$/.test(parsedUrl.pathname)) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.equal(dealAttempts, 2);
+  assert.equal(observedSleeps.length, 1);
+  assert.ok(observedSleeps[0] >= 250);
+  assert.equal(preview.normalizedDeal.owner.name, "Retry Owner");
 });
 
 test("loadHubSpotDealPreview falls back to synthetic owner when owner lookup is forbidden", async () => {
@@ -640,6 +729,74 @@ test("createHubSpotRescueTask blocks when an open Pipeline Rescue task already e
     }),
     /already exists/
   );
+});
+
+test("createHubSpotRescueTask retries a transient HubSpot write failure before succeeding", async () => {
+  let taskWriteAttempts = 0;
+  const observedSleeps = [];
+
+  const result = await createHubSpotRescueTask({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          accessToken: "access_token",
+          refreshToken: "refresh_token",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    portalId: "123456",
+    preview: {
+      source: { fetchedAt: "2026-04-12T10:00:00Z" },
+      graph: { deal: { id: "987" }, companies: [], contacts: [], tasks: [] },
+      normalizedDeal: { owner: { id: "44" } }
+    },
+    analysis: {
+      analysis: {
+        dealId: "987",
+        dealName: "Acme Expansion",
+        eligibility: "ELIGIBLE",
+        rescueScore: 86,
+        reasons: [],
+        recommendedAction: {
+          type: "CREATE_NEXT_STEP_TASK",
+          priority: "HIGH",
+          summary: "Define a concrete next step and create a dated task."
+        }
+      },
+      verification: {
+        validationStatus: "VALIDATED"
+      }
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    sleepImpl: async (delayMs) => {
+      observedSleeps.push(delayMs);
+    },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks") {
+        taskWriteAttempts += 1;
+        if (taskWriteAttempts === 1) {
+          return createJsonResponse(503, { message: "temporary HubSpot outage" });
+        }
+
+        return createJsonResponse(201, {
+          id: "task_9002",
+          properties: JSON.parse(options.body).properties
+        });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.equal(taskWriteAttempts, 2);
+  assert.equal(observedSleeps.length, 1);
+  assert.ok(observedSleeps[0] >= 250);
+  assert.equal(result.task.taskId, "task_9002");
 });
 
 test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", async () => {

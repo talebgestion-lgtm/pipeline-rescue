@@ -23,6 +23,79 @@ function getFetchImplementation(options = {}) {
   return implementation;
 }
 
+function getHeaderValue(headers, name) {
+  if (!headers) {
+    return null;
+  }
+
+  if (typeof headers.get === "function") {
+    return headers.get(name) || headers.get(String(name).toLowerCase()) || null;
+  }
+
+  const match = Object.keys(headers).find((key) => key.toLowerCase() === String(name).toLowerCase());
+  return match ? headers[match] : null;
+}
+
+function parseRetryAfterMs(headers, now = new Date()) {
+  const retryAfterValue = getHeaderValue(headers, "retry-after");
+  if (!retryAfterValue) {
+    return null;
+  }
+
+  const numericSeconds = Number(retryAfterValue);
+  if (Number.isFinite(numericSeconds)) {
+    return Math.max(0, Math.round(numericSeconds * 1000));
+  }
+
+  const retryDate = new Date(retryAfterValue);
+  if (Number.isNaN(retryDate.getTime())) {
+    return null;
+  }
+
+  return Math.max(0, retryDate.getTime() - now.getTime());
+}
+
+function isRetryableHubSpotStatus(statusCode) {
+  return statusCode === 429 || (statusCode >= 500 && statusCode < 600);
+}
+
+function calculateRetryDelayMs(attemptNumber, error) {
+  if (Number.isFinite(error && error.retryAfterMs)) {
+    return Math.min(Math.max(error.retryAfterMs, 250), 5000);
+  }
+
+  return Math.min(250 * (2 ** attemptNumber), 2000);
+}
+
+async function pauseBeforeRetry(delayMs, sleepImpl) {
+  if (!Number.isFinite(delayMs) || delayMs <= 0) {
+    return;
+  }
+
+  if (typeof sleepImpl === "function") {
+    await sleepImpl(delayMs);
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function executeHubSpotRetryableRequest(execute, options = {}) {
+  const maxRetries = Number.isInteger(options.maxRetries) ? options.maxRetries : 2;
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await execute();
+    } catch (error) {
+      if (!isRetryableHubSpotStatus(error && error.statusCode) || attempt >= maxRetries) {
+        throw error;
+      }
+
+      await pauseBeforeRetry(calculateRetryDelayMs(attempt, error), options.sleepImpl);
+    }
+  }
+}
+
 function toNumber(value) {
   if (value == null || value === "") {
     return null;
@@ -159,17 +232,20 @@ async function hubSpotRequest({ install, path, method = "GET", body, fetchImpl }
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw createHubSpotClientError(
+    const error = createHubSpotClientError(
       `HubSpot request failed with status ${response.status}.`,
       response.status,
       payload && payload.message ? payload.message : null
     );
+    error.retryAfterMs = parseRetryAfterMs(response.headers);
+    error.requestId = getHeaderValue(response.headers, "x-hubspot-request-id");
+    throw error;
   }
 
   return payload;
 }
 
-async function refreshHubSpotAccessToken({ config, install, env = process.env, fetchImpl }) {
+async function refreshHubSpotAccessToken({ config, install, env = process.env, fetchImpl, sleepImpl }) {
   const clientSecret = env[config.clientSecretEnvVar];
   if (!clientSecret) {
     throw createHubSpotClientError(`Missing ${config.clientSecretEnvVar} in the process environment.`, 409);
@@ -186,22 +262,31 @@ async function refreshHubSpotAccessToken({ config, install, env = process.env, f
     refresh_token: install.refreshToken
   });
 
-  const response = await getFetchImplementation({ fetchImpl })("https://api.hubapi.com/oauth/v1/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
-    },
-    body: body.toString()
-  });
+  const payload = await executeHubSpotRetryableRequest(async () => {
+    const response = await getFetchImplementation({ fetchImpl })("https://api.hubapi.com/oauth/v1/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded;charset=utf-8"
+      },
+      body: body.toString()
+    });
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw createHubSpotClientError(
-      `HubSpot token refresh failed with status ${response.status}.`,
-      response.status,
-      payload && payload.message ? payload.message : null
-    );
-  }
+    const responsePayload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = createHubSpotClientError(
+        `HubSpot token refresh failed with status ${response.status}.`,
+        response.status,
+        responsePayload && responsePayload.message ? responsePayload.message : null
+      );
+      error.retryAfterMs = parseRetryAfterMs(response.headers);
+      error.requestId = getHeaderValue(response.headers, "x-hubspot-request-id");
+      throw error;
+    }
+
+    return responsePayload;
+  }, {
+    sleepImpl
+  });
 
   return {
     ...install,
@@ -240,7 +325,8 @@ async function createLiveRequestSession(options) {
       config: session.config,
       install: activeInstall,
       env: options.env,
-      fetchImpl: options.fetchImpl
+      fetchImpl: options.fetchImpl,
+      sleepImpl: options.sleepImpl
     });
     activeInstallState = upsertInstallRecord(activeInstallState, activeInstall);
     tokenRefreshed = true;
@@ -251,28 +337,31 @@ async function createLiveRequestSession(options) {
   }
 
   async function requestWithRefresh(path, method = "GET", body) {
-    try {
-      return await hubSpotRequest({
-        install: activeInstall,
-        path,
-        method,
-        body,
-        fetchImpl: options.fetchImpl
-      });
-    } catch (error) {
-      if (error.statusCode === 401 && activeInstall.refreshToken) {
-        await refreshAndStore();
-        return hubSpotRequest({
-          install: activeInstall,
-          path,
-          method,
-          body,
-          fetchImpl: options.fetchImpl
-        });
-      }
+    return executeHubSpotRetryableRequest(async () => {
+      let refreshedForThisRequest = false;
 
-      throw error;
-    }
+      for (;;) {
+        try {
+          return await hubSpotRequest({
+            install: activeInstall,
+            path,
+            method,
+            body,
+            fetchImpl: options.fetchImpl
+          });
+        } catch (error) {
+          if (error.statusCode === 401 && activeInstall.refreshToken && !refreshedForThisRequest) {
+            await refreshAndStore();
+            refreshedForThisRequest = true;
+            continue;
+          }
+
+          throw error;
+        }
+      }
+    }, {
+      sleepImpl: options.sleepImpl
+    });
   }
 
   return {
