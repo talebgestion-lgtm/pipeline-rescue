@@ -1512,6 +1512,14 @@ const server = http.createServer(async (request, response) => {
 
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
+    if (error.hubspotTokenRefreshed && error.hubspotInstallState) {
+      try {
+        saveJsonAtomic(hubspotInstallStatePath, error.hubspotInstallState);
+      } catch (persistError) {
+        // Best-effort persistence only; preserve the original response.
+      }
+    }
+
     sendJson(response, error.statusCode || (error.message === "Invalid JSON body" ? 400 : 500), {
       error: error.message,
       ...(error.detail ? { detail: error.detail } : {})

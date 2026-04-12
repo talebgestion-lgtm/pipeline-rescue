@@ -380,6 +380,16 @@ async function createLiveRequestSession(options) {
   };
 }
 
+function attachHubSpotSessionError(error, liveSession) {
+  if (!error || !liveSession) {
+    return error;
+  }
+
+  error.hubspotInstallState = liveSession.getInstallState();
+  error.hubspotTokenRefreshed = Boolean(liveSession.getTokenRefreshed());
+  return error;
+}
+
 function extractAssociationResults(payload) {
   return Array.isArray(payload && payload.results) ? payload.results : [];
 }
@@ -937,117 +947,121 @@ function buildHubSpotTaskPayload({ preview, analysis, dueAt }) {
 
 async function loadHubSpotDealData(options) {
   const liveSession = await createLiveRequestSession(options);
-  const dealId = String(options.dealId || "").trim();
-  if (!dealId) {
-    throw createHubSpotClientError("A HubSpot deal ID is required for live preview.", 400);
-  }
-
-  const dealRecord = await liveSession.requestWithRefresh(
-    `/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=${encodeURIComponent([
-      "dealname",
-      "amount",
-      "closedate",
-      "dealstage",
-      "pipeline",
-      "hubspot_owner_id",
-      "hs_next_step",
-      "hs_lastactivitydate",
-      "hs_is_closed_won",
-      "hs_is_closed_lost",
-      "createdate"
-    ].join(","))}`
-  );
-  const ownerId = dealRecord.properties && dealRecord.properties.hubspot_owner_id
-    ? String(dealRecord.properties.hubspot_owner_id)
-    : null;
-
-  const [ownerResolution, contactAssociations, companyAssociations, taskAssociations] = await Promise.all([
-    loadOwnerRecord(liveSession, ownerId),
-    liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts`),
-    liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/companies`),
-    liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/tasks`)
-  ]);
-
-  let noteAssociations = { results: [] };
-  let noteLookupWarning = null;
   try {
-    noteAssociations = await liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/notes`);
-  } catch (error) {
-    if (error.statusCode === 403) {
-      noteLookupWarning = "HubSpot notes could not be loaded because the token lacks note-read access.";
-    } else if (error.statusCode === 404) {
-      noteLookupWarning = "HubSpot notes association lookup is unavailable for this portal.";
-    } else {
-      throw error;
+    const dealId = String(options.dealId || "").trim();
+    if (!dealId) {
+      throw createHubSpotClientError("A HubSpot deal ID is required for live preview.", 400);
     }
+
+    const dealRecord = await liveSession.requestWithRefresh(
+      `/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=${encodeURIComponent([
+        "dealname",
+        "amount",
+        "closedate",
+        "dealstage",
+        "pipeline",
+        "hubspot_owner_id",
+        "hs_next_step",
+        "hs_lastactivitydate",
+        "hs_is_closed_won",
+        "hs_is_closed_lost",
+        "createdate"
+      ].join(","))}`
+    );
+    const ownerId = dealRecord.properties && dealRecord.properties.hubspot_owner_id
+      ? String(dealRecord.properties.hubspot_owner_id)
+      : null;
+
+    const [ownerResolution, contactAssociations, companyAssociations, taskAssociations] = await Promise.all([
+      loadOwnerRecord(liveSession, ownerId),
+      liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts`),
+      liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/companies`),
+      liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/tasks`)
+    ]);
+
+    let noteAssociations = { results: [] };
+    let noteLookupWarning = null;
+    try {
+      noteAssociations = await liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/notes`);
+    } catch (error) {
+      if (error.statusCode === 403) {
+        noteLookupWarning = "HubSpot notes could not be loaded because the token lacks note-read access.";
+      } else if (error.statusCode === 404) {
+        noteLookupWarning = "HubSpot notes association lookup is unavailable for this portal.";
+      } else {
+        throw error;
+      }
+    }
+
+    const contactIds = extractAssociationResults(contactAssociations).map((entry) => String(entry.toObjectId));
+    const companyIds = extractAssociationResults(companyAssociations).map((entry) => String(entry.toObjectId));
+    const taskIds = extractAssociationResults(taskAssociations).map((entry) => String(entry.toObjectId));
+    const noteIds = extractAssociationResults(noteAssociations).map((entry) => String(entry.toObjectId));
+
+    const [contactRecords, companyRecords, taskRecords, noteRecords] = await Promise.all([
+      batchReadObjects({
+        install: liveSession.getInstall(),
+        objectType: "contacts",
+        ids: contactIds,
+        properties: ["firstname", "lastname", "email"],
+        fetchImpl: options.fetchImpl,
+        requestImpl: liveSession.requestWithRefresh
+      }),
+      batchReadObjects({
+        install: liveSession.getInstall(),
+        objectType: "companies",
+        ids: companyIds,
+        properties: ["name"],
+        fetchImpl: options.fetchImpl,
+        requestImpl: liveSession.requestWithRefresh
+      }),
+      batchReadObjects({
+        install: liveSession.getInstall(),
+        objectType: "tasks",
+        ids: taskIds,
+        properties: ["hs_task_subject", "hs_task_status", "hs_timestamp", "hs_task_body"],
+        fetchImpl: options.fetchImpl,
+        requestImpl: liveSession.requestWithRefresh
+      }),
+      batchReadObjects({
+        install: liveSession.getInstall(),
+        objectType: "notes",
+        ids: noteIds,
+        properties: ["hs_note_body", "hs_timestamp", "hubspot_owner_id"],
+        fetchImpl: options.fetchImpl,
+        requestImpl: liveSession.requestWithRefresh
+      })
+    ]);
+
+    const contacts = normalizeContacts(contactRecords, extractAssociationResults(contactAssociations));
+    const companies = normalizeCompanies(companyRecords);
+    const tasks = normalizeTasks(taskRecords, liveSession.analysisTimestamp);
+    const notes = normalizeNotes(noteRecords);
+    const normalizedDeal = buildNormalizedDeal({
+      dealRecord,
+      contacts,
+      companies,
+      tasks,
+      notes,
+      analysisTimestamp: liveSession.analysisTimestamp,
+      ownerRecord: ownerResolution.ownerRecord,
+      ownerLookupWarning: ownerResolution.warning,
+      noteLookupWarning
+    });
+
+    return {
+      liveSession,
+      dealId,
+      dealRecord,
+      contacts,
+      companies,
+      tasks,
+      notes,
+      normalizedDeal
+    };
+  } catch (error) {
+    throw attachHubSpotSessionError(error, liveSession);
   }
-
-  const contactIds = extractAssociationResults(contactAssociations).map((entry) => String(entry.toObjectId));
-  const companyIds = extractAssociationResults(companyAssociations).map((entry) => String(entry.toObjectId));
-  const taskIds = extractAssociationResults(taskAssociations).map((entry) => String(entry.toObjectId));
-  const noteIds = extractAssociationResults(noteAssociations).map((entry) => String(entry.toObjectId));
-
-  const [contactRecords, companyRecords, taskRecords, noteRecords] = await Promise.all([
-    batchReadObjects({
-      install: liveSession.getInstall(),
-      objectType: "contacts",
-      ids: contactIds,
-      properties: ["firstname", "lastname", "email"],
-      fetchImpl: options.fetchImpl,
-      requestImpl: liveSession.requestWithRefresh
-    }),
-    batchReadObjects({
-      install: liveSession.getInstall(),
-      objectType: "companies",
-      ids: companyIds,
-      properties: ["name"],
-      fetchImpl: options.fetchImpl,
-      requestImpl: liveSession.requestWithRefresh
-    }),
-    batchReadObjects({
-      install: liveSession.getInstall(),
-      objectType: "tasks",
-      ids: taskIds,
-      properties: ["hs_task_subject", "hs_task_status", "hs_timestamp", "hs_task_body"],
-      fetchImpl: options.fetchImpl,
-      requestImpl: liveSession.requestWithRefresh
-    }),
-    batchReadObjects({
-      install: liveSession.getInstall(),
-      objectType: "notes",
-      ids: noteIds,
-      properties: ["hs_note_body", "hs_timestamp", "hubspot_owner_id"],
-      fetchImpl: options.fetchImpl,
-      requestImpl: liveSession.requestWithRefresh
-    })
-  ]);
-
-  const contacts = normalizeContacts(contactRecords, extractAssociationResults(contactAssociations));
-  const companies = normalizeCompanies(companyRecords);
-  const tasks = normalizeTasks(taskRecords, liveSession.analysisTimestamp);
-  const notes = normalizeNotes(noteRecords);
-  const normalizedDeal = buildNormalizedDeal({
-    dealRecord,
-    contacts,
-    companies,
-    tasks,
-    notes,
-    analysisTimestamp: liveSession.analysisTimestamp,
-    ownerRecord: ownerResolution.ownerRecord,
-    ownerLookupWarning: ownerResolution.warning,
-    noteLookupWarning
-  });
-
-  return {
-    liveSession,
-    dealId,
-    dealRecord,
-    contacts,
-    companies,
-    tasks,
-    notes,
-    normalizedDeal
-  };
 }
 
 async function loadHubSpotDealPreview(options) {
@@ -1067,81 +1081,89 @@ async function loadHubSpotDealPreview(options) {
 
 async function searchHubSpotDeals(options) {
   const liveSession = await createLiveRequestSession(options);
-  const criteria = options.criteria || {};
-  const searchRequest = buildHubSpotDealSearchRequest(criteria, liveSession.analysisTimestamp);
-  const searchResult = await liveSession.requestWithRefresh(
-    "/crm/v3/objects/deals/search",
-    "POST",
-    searchRequest
-  );
-  const dealIds = Array.from(new Set(
-    (Array.isArray(searchResult && searchResult.results) ? searchResult.results : [])
-      .map((item) => String(item && item.id ? item.id : "").trim())
-      .filter(Boolean)
-  ));
+  try {
+    const criteria = options.criteria || {};
+    const searchRequest = buildHubSpotDealSearchRequest(criteria, liveSession.analysisTimestamp);
+    const searchResult = await liveSession.requestWithRefresh(
+      "/crm/v3/objects/deals/search",
+      "POST",
+      searchRequest
+    );
+    const dealIds = Array.from(new Set(
+      (Array.isArray(searchResult && searchResult.results) ? searchResult.results : [])
+        .map((item) => String(item && item.id ? item.id : "").trim())
+        .filter(Boolean)
+    ));
 
-  return {
-    criteria,
-    searchRequest,
-    dealIds,
-    source: {
-      portalId: String(liveSession.getInstall().portalId),
-      hubDomain: liveSession.getInstall().hubDomain || null,
-      fetchedAt: liveSession.analysisTimestamp,
-      tokenRefreshed: liveSession.getTokenRefreshed(),
-      dealCount: dealIds.length
-    },
-    installState: liveSession.getInstallState()
-  };
+    return {
+      criteria,
+      searchRequest,
+      dealIds,
+      source: {
+        portalId: String(liveSession.getInstall().portalId),
+        hubDomain: liveSession.getInstall().hubDomain || null,
+        fetchedAt: liveSession.analysisTimestamp,
+        tokenRefreshed: liveSession.getTokenRefreshed(),
+        dealCount: dealIds.length
+      },
+      installState: liveSession.getInstallState()
+    };
+  } catch (error) {
+    throw attachHubSpotSessionError(error, liveSession);
+  }
 }
 
 async function createHubSpotRescueTask(options) {
   const liveSession = await createLiveRequestSession(options);
-  const preview = options.preview;
-  if (!preview || !preview.graph || !preview.graph.deal || !preview.graph.deal.id) {
-    throw createHubSpotClientError("A live HubSpot preview is required before creating a HubSpot task.", 500);
+  try {
+    const preview = options.preview;
+    if (!preview || !preview.graph || !preview.graph.deal || !preview.graph.deal.id) {
+      throw createHubSpotClientError("A live HubSpot preview is required before creating a HubSpot task.", 500);
+    }
+
+    const payload = buildHubSpotTaskPayload({
+      preview,
+      analysis: options.analysis,
+      dueAt: options.dueAt || null
+    });
+
+    const currentRescueTask = await loadCurrentTaskWriteGuard(liveSession, preview.graph.deal.id);
+    if (currentRescueTask) {
+      throw createHubSpotClientError(
+        "HubSpot task creation is blocked because an open Pipeline Rescue task already exists on this deal.",
+        409,
+        `Existing rescue task ${currentRescueTask.id}: ${currentRescueTask.subject}`
+      );
+    }
+
+    const result = await liveSession.requestWithRefresh("/crm/v3/objects/tasks", "POST", payload);
+    const properties = result.properties || payload.properties;
+
+    return {
+      source: {
+        portalId: liveSession.getInstall().portalId,
+        hubDomain: liveSession.getInstall().hubDomain || null,
+        tokenRefreshed: liveSession.getTokenRefreshed(),
+        writtenAt: new Date().toISOString()
+      },
+      task: {
+        taskId: String(result.id),
+        subject: properties.hs_task_subject || payload.properties.hs_task_subject,
+        status: properties.hs_task_status || payload.properties.hs_task_status,
+        dueAt: properties.hs_timestamp || payload.properties.hs_timestamp,
+        body: properties.hs_task_body || payload.properties.hs_task_body,
+        ownerId: properties.hubspot_owner_id || payload.properties.hubspot_owner_id || null,
+        taskType: properties.hs_task_type || payload.properties.hs_task_type,
+        priority: properties.hs_task_priority || payload.properties.hs_task_priority,
+        associatedDealId: preview.graph.deal.id,
+        associatedCompanyCount: (preview.graph.companies || []).length,
+        associatedContactCount: (preview.graph.contacts || []).length
+      },
+      installState: liveSession.getInstallState()
+    };
+  } catch (error) {
+    throw attachHubSpotSessionError(error, liveSession);
   }
-
-  const payload = buildHubSpotTaskPayload({
-    preview,
-    analysis: options.analysis,
-    dueAt: options.dueAt || null
-  });
-
-  const currentRescueTask = await loadCurrentTaskWriteGuard(liveSession, preview.graph.deal.id);
-  if (currentRescueTask) {
-    throw createHubSpotClientError(
-      "HubSpot task creation is blocked because an open Pipeline Rescue task already exists on this deal.",
-      409,
-      `Existing rescue task ${currentRescueTask.id}: ${currentRescueTask.subject}`
-    );
-  }
-
-  const result = await liveSession.requestWithRefresh("/crm/v3/objects/tasks", "POST", payload);
-  const properties = result.properties || payload.properties;
-
-  return {
-    source: {
-      portalId: liveSession.getInstall().portalId,
-      hubDomain: liveSession.getInstall().hubDomain || null,
-      tokenRefreshed: liveSession.getTokenRefreshed(),
-      writtenAt: new Date().toISOString()
-    },
-    task: {
-      taskId: String(result.id),
-      subject: properties.hs_task_subject || payload.properties.hs_task_subject,
-      status: properties.hs_task_status || payload.properties.hs_task_status,
-      dueAt: properties.hs_timestamp || payload.properties.hs_timestamp,
-      body: properties.hs_task_body || payload.properties.hs_task_body,
-      ownerId: properties.hubspot_owner_id || payload.properties.hubspot_owner_id || null,
-      taskType: properties.hs_task_type || payload.properties.hs_task_type,
-      priority: properties.hs_task_priority || payload.properties.hs_task_priority,
-      associatedDealId: preview.graph.deal.id,
-      associatedCompanyCount: (preview.graph.companies || []).length,
-      associatedContactCount: (preview.graph.contacts || []).length
-    },
-    installState: liveSession.getInstallState()
-  };
 }
 
 function buildHubSpotNotePayload({ preview, analysis, draftResult, noteAt }) {
@@ -1192,51 +1214,55 @@ function buildHubSpotNotePayload({ preview, analysis, draftResult, noteAt }) {
 
 async function createHubSpotDraftNote(options) {
   const liveSession = await createLiveRequestSession(options);
-  const preview = options.preview;
-  if (!preview || !preview.graph || !preview.graph.deal || !preview.graph.deal.id) {
-    throw createHubSpotClientError("A live HubSpot preview is required before creating a HubSpot note.", 500);
-  }
+  try {
+    const preview = options.preview;
+    if (!preview || !preview.graph || !preview.graph.deal || !preview.graph.deal.id) {
+      throw createHubSpotClientError("A live HubSpot preview is required before creating a HubSpot note.", 500);
+    }
 
-  const payload = buildHubSpotNotePayload({
-    preview,
-    analysis: options.analysis,
-    draftResult: options.draftResult,
-    noteAt: options.noteAt || null
-  });
+    const payload = buildHubSpotNotePayload({
+      preview,
+      analysis: options.analysis,
+      draftResult: options.draftResult,
+      noteAt: options.noteAt || null
+    });
 
-  const currentRescueNote = await loadCurrentNoteWriteGuard(
-    liveSession,
-    preview.graph.deal.id,
-    options.draftResult && options.draftResult.draft ? options.draftResult.draft.subject : null
-  );
-  if (currentRescueNote) {
-    throw createHubSpotClientError(
-      "HubSpot note creation is blocked because an equivalent Pipeline Rescue note already exists on this deal.",
-      409,
-      `Existing rescue note ${currentRescueNote.id}: ${currentRescueNote.draftSubject || "Unknown subject"}`
+    const currentRescueNote = await loadCurrentNoteWriteGuard(
+      liveSession,
+      preview.graph.deal.id,
+      options.draftResult && options.draftResult.draft ? options.draftResult.draft.subject : null
     );
+    if (currentRescueNote) {
+      throw createHubSpotClientError(
+        "HubSpot note creation is blocked because an equivalent Pipeline Rescue note already exists on this deal.",
+        409,
+        `Existing rescue note ${currentRescueNote.id}: ${currentRescueNote.draftSubject || "Unknown subject"}`
+      );
+    }
+
+    const result = await liveSession.requestWithRefresh("/crm/v3/objects/notes", "POST", payload);
+    const properties = result.properties || payload.properties;
+
+    return {
+      source: {
+        portalId: liveSession.getInstall().portalId,
+        hubDomain: liveSession.getInstall().hubDomain || null,
+        tokenRefreshed: liveSession.getTokenRefreshed(),
+        writtenAt: new Date().toISOString()
+      },
+      note: {
+        noteId: String(result.id),
+        body: properties.hs_note_body || payload.properties.hs_note_body,
+        ownerId: properties.hubspot_owner_id || payload.properties.hubspot_owner_id || null,
+        associatedDealId: preview.graph.deal.id,
+        associatedCompanyCount: (preview.graph.companies || []).length,
+        associatedContactCount: (preview.graph.contacts || []).length
+      },
+      installState: liveSession.getInstallState()
+    };
+  } catch (error) {
+    throw attachHubSpotSessionError(error, liveSession);
   }
-
-  const result = await liveSession.requestWithRefresh("/crm/v3/objects/notes", "POST", payload);
-  const properties = result.properties || payload.properties;
-
-  return {
-    source: {
-      portalId: liveSession.getInstall().portalId,
-      hubDomain: liveSession.getInstall().hubDomain || null,
-      tokenRefreshed: liveSession.getTokenRefreshed(),
-      writtenAt: new Date().toISOString()
-    },
-    note: {
-      noteId: String(result.id),
-      body: properties.hs_note_body || payload.properties.hs_note_body,
-      ownerId: properties.hubspot_owner_id || payload.properties.hubspot_owner_id || null,
-      associatedDealId: preview.graph.deal.id,
-      associatedCompanyCount: (preview.graph.companies || []).length,
-      associatedContactCount: (preview.graph.contacts || []).length
-    },
-    installState: liveSession.getInstallState()
-  };
 }
 
 module.exports = {

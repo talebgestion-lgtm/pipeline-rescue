@@ -88,6 +88,7 @@ It now has:
 - bounded HubSpot retry handling for transient `429` and `5xx` failures
 - note-capable HubSpot OAuth defaults and idempotent rescue-note write protection
 - live CRM revalidation just before HubSpot rescue task and note writes
+- refreshed HubSpot install state survives duplicate-write skips and live write failures
 - live HubSpot stale-deal discovery by CRM criteria
 - live HubSpot multi-deal queue for manager rescue review
 - live HubSpot rescue batch execution for validated at-risk tasks

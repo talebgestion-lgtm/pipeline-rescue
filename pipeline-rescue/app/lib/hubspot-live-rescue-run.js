@@ -148,6 +148,11 @@ async function executeLiveRescueRun({ liveQueue, criteria, portalId, taskWriter 
       writtenTasks.push(writeResult.task);
       decisions.push(createDecisionRecord(deal, "TASK_WRITTEN", "Live HubSpot rescue task created.", writeResult.task));
     } catch (error) {
+      if (error.hubspotInstallState) {
+        installState = error.hubspotInstallState;
+      }
+      tokenRefreshed = tokenRefreshed || Boolean(error.hubspotTokenRefreshed);
+
       const detail = error.detail || error.message || "Live HubSpot task write failed.";
       if (error.statusCode === 409 && /already exists/i.test(detail)) {
         decisions.push(createDecisionRecord(

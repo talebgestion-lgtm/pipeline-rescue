@@ -139,6 +139,7 @@ The UI now supports:
 - bounded HubSpot retry handling for transient `429` and `5xx` API failures
 - note-capable HubSpot OAuth defaults and duplicate rescue-note blocking on the same deal
 - live CRM revalidation immediately before HubSpot rescue task and note writes
+- refreshed HubSpot install state now survives duplicate-write skips and failed live writes
 - a live HubSpot criteria-discovery path to find stale deals without manually collecting IDs
 - a live HubSpot multi-deal queue path for manager-level rescue review
 - a live HubSpot rescue batch path that writes only validated at-risk tasks from the discovered queue

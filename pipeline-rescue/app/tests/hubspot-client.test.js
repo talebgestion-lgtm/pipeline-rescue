@@ -823,69 +823,86 @@ test("createHubSpotRescueTask retries a transient HubSpot write failure before s
 });
 
 test("createHubSpotRescueTask blocks when current CRM state already has an open rescue task", async () => {
-  await assert.rejects(
-    () => createHubSpotRescueTask({
-      config: validConfig,
-      installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
-      },
-      portalId: "123456",
-      preview: {
-        source: { fetchedAt: "2026-04-12T10:00:00Z" },
-        graph: { deal: { id: "987" }, companies: [], contacts: [], tasks: [] },
-        normalizedDeal: { owner: { id: "44" } }
-      },
+  await createHubSpotRescueTask({
+    config: validConfig,
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          accessToken: "expired_token",
+          refreshToken: "refresh_token",
+          expiresAt: "2026-04-12T09:59:00Z",
+          connectedAt: "2026-04-12T08:00:00Z"
+        }
+      ]
+    },
+    portalId: "123456",
+    preview: {
+      source: { fetchedAt: "2026-04-12T10:00:00Z" },
+      graph: { deal: { id: "987" }, companies: [], contacts: [], tasks: [] },
+      normalizedDeal: { owner: { id: "44" } }
+    },
+    analysis: {
       analysis: {
-        analysis: {
-          dealId: "987",
-          dealName: "Acme Expansion",
-          eligibility: "ELIGIBLE",
-          rescueScore: 86,
-          reasons: [],
-          recommendedAction: {
-            type: "CREATE_NEXT_STEP_TASK",
-            priority: "HIGH",
-            summary: "Define a concrete next step and create a dated task."
-          }
-        },
-        verification: {
-          validationStatus: "VALIDATED"
+        dealId: "987",
+        dealName: "Acme Expansion",
+        eligibility: "ELIGIBLE",
+        rescueScore: 86,
+        reasons: [],
+        recommendedAction: {
+          type: "CREATE_NEXT_STEP_TASK",
+          priority: "HIGH",
+          summary: "Define a concrete next step and create a dated task."
         }
       },
-      env: { HUBSPOT_CLIENT_SECRET: "secret" },
-      fetchImpl: async (url, options = {}) => {
-        const parsedUrl = new URL(url);
-
-        if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/tasks") {
-          return createJsonResponse(200, { results: [{ toObjectId: 401, associationTypes: [] }] });
-        }
-
-        if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks/batch/read") {
-          return createJsonResponse(200, {
-            results: [
-              {
-                id: "401",
-                properties: {
-                  hs_task_subject: "Pipeline Rescue | Acme Expansion",
-                  hs_task_status: "NOT_STARTED",
-                  hs_timestamp: "2026-04-14T10:00:00Z"
-                }
-              }
-            ]
-          });
-        }
-
-        throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+      verification: {
+        validationStatus: "VALIDATED"
       }
-    }),
-    /already exists/
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+
+      if (options.method === "POST" && parsedUrl.pathname === "/oauth/v1/token") {
+        return createJsonResponse(200, {
+          access_token: "fresh_token",
+          refresh_token: "fresh_refresh_token",
+          expires_in: 1800,
+          token_type: "bearer"
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/tasks") {
+        assert.equal(options.headers.Authorization, "Bearer fresh_token");
+        return createJsonResponse(200, { results: [{ toObjectId: 401, associationTypes: [] }] });
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks/batch/read") {
+        assert.equal(options.headers.Authorization, "Bearer fresh_token");
+        return createJsonResponse(200, {
+          results: [
+            {
+              id: "401",
+              properties: {
+                hs_task_subject: "Pipeline Rescue | Acme Expansion",
+                hs_task_status: "NOT_STARTED",
+                hs_timestamp: "2026-04-14T10:00:00Z"
+              }
+            }
+          ]
+        });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  }).then(
+    () => assert.fail("Expected duplicate rescue task block."),
+    (error) => {
+      assert.match(error.message, /already exists/);
+      assert.equal(error.hubspotTokenRefreshed, true);
+      assert.equal(error.hubspotInstallState.installs[0].accessToken, "fresh_token");
+      assert.equal(error.hubspotInstallState.installs[0].refreshToken, "fresh_refresh_token");
+    }
   );
 });
 
