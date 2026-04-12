@@ -17,7 +17,7 @@ const {
   validateHubSpotConfigPayload
 } = require("./lib/hubspot-oauth");
 const { loadEnvFile } = require("./lib/env-loader");
-const { loadHubSpotDealPreview } = require("./lib/hubspot-client");
+const { createHubSpotRescueTask, loadHubSpotDealPreview } = require("./lib/hubspot-client");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
 const rootDir = __dirname;
@@ -515,6 +515,69 @@ const server = http.createServer(async (request, response) => {
         graph: preview.graph,
         overview,
         dealAnalysis
+      });
+      return;
+    }
+
+    const hubspotLiveTaskMatch = url.pathname.match(/^\/api\/hubspot\/live\/deals\/([^/]+)\/tasks$/);
+    if (request.method === "POST" && hubspotLiveTaskMatch) {
+      if (!appState.fixtures) {
+        sendJson(response, 503, {
+          error: "Live task creation unavailable",
+          detail: appState.startupError || "Scenario fixtures are unavailable."
+        });
+        return;
+      }
+
+      if (hubspotState.error) {
+        sendJson(response, 500, {
+          error: "HubSpot live task creation unavailable",
+          detail: hubspotState.error
+        });
+        return;
+      }
+
+      const preview = await loadHubSpotDealPreview({
+        config: hubspotState.hubspotConfig,
+        installState: hubspotState.installState,
+        portalId: url.searchParams.get("portalId") || null,
+        dealId: hubspotLiveTaskMatch[1],
+        analysisTimestamp: new Date().toISOString()
+      });
+
+      const liveFixtures = {
+        defaultScenario: "hubspot-live-preview",
+        stageExpectationsDays: appState.fixtures.stageExpectationsDays,
+        scenarios: {
+          "hubspot-live-preview": preview.scenario
+        }
+      };
+
+      const dealAnalysis = stampMetaVersion(
+        buildDealAnalysis(liveFixtures, "hubspot-live-preview", preview.normalizedDeal.id),
+        appState.packageManifest.version
+      );
+
+      const taskWrite = await createHubSpotRescueTask({
+        config: hubspotState.hubspotConfig,
+        installState: preview.installState,
+        portalId: url.searchParams.get("portalId") || preview.source.portalId || null,
+        analysisTimestamp: preview.source.fetchedAt,
+        preview,
+        analysis: dealAnalysis
+      });
+
+      if (preview.source.tokenRefreshed || taskWrite.source.tokenRefreshed) {
+        saveJsonAtomic(hubspotInstallStatePath, taskWrite.installState);
+      }
+
+      sendJson(response, 200, {
+        source: preview.source,
+        normalizedDeal: preview.normalizedDeal,
+        normalizationWarnings: preview.normalizationWarnings,
+        graph: preview.graph,
+        dealAnalysis,
+        hubspotTask: taskWrite.task
       });
       return;
     }

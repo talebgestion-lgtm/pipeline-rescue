@@ -101,6 +101,13 @@ async function loadHubSpotLivePreview(portalId, dealId) {
   return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}${query}`);
 }
 
+async function createHubSpotLiveTask(portalId, dealId) {
+  const query = portalId ? `?portalId=${encodeURIComponent(portalId)}` : "";
+  return fetchJson(`/api/hubspot/live/deals/${encodeURIComponent(dealId)}/tasks${query}`, {
+    method: "POST"
+  });
+}
+
 async function probeProvider() {
   return fetchJson("/api/ai/provider-probe", {
     method: "POST"
@@ -935,6 +942,7 @@ function renderHubSpotLivePreview(preview) {
   const contacts = preview.graph?.contacts || [];
   const tasks = preview.graph?.tasks || [];
   const warnings = preview.normalizationWarnings || [];
+  const liveTask = preview.hubspotTask || null;
 
   container.innerHTML = `
     <div class="verification-grid">
@@ -985,6 +993,16 @@ function renderHubSpotLivePreview(preview) {
         ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
       </ul>
     </div>
+    ${liveTask ? `
+      <div class="verification-block">
+        <p class="score-label">Last live HubSpot task write</p>
+        <ul class="verification-list">
+          <li>${escapeHtml(liveTask.taskId)} | ${escapeHtml(liveTask.subject)}</li>
+          <li>${escapeHtml(liveTask.status)} | ${escapeHtml(liveTask.priority)} | ${escapeHtml(liveTask.taskType)}</li>
+          <li>${liveTask.dueAt ? escapeHtml(new Date(liveTask.dueAt).toLocaleString("en-GB")) : "No due date"} | contacts ${liveTask.associatedContactCount} | companies ${liveTask.associatedCompanyCount}</li>
+        </ul>
+      </div>
+    ` : ""}
   `;
 }
 
@@ -1586,6 +1604,35 @@ async function handleHubSpotLivePreviewClick() {
   }
 }
 
+async function handleHubSpotLiveTaskClick() {
+  try {
+    const portalId = document.getElementById("hubspot-live-portal-input").value.trim();
+    const dealId = document.getElementById("hubspot-live-deal-input").value.trim();
+
+    if (!dealId) {
+      throw new Error("A HubSpot deal ID is required for live task creation.");
+    }
+
+    const response = await createHubSpotLiveTask(portalId || "", dealId);
+    appState.hubspotLivePreview = {
+      source: response.source,
+      normalizedDeal: response.normalizedDeal,
+      normalizationWarnings: response.normalizationWarnings,
+      graph: response.graph,
+      dealAnalysis: response.dealAnalysis,
+      hubspotTask: response.hubspotTask
+    };
+    renderHubSpotLivePreview(appState.hubspotLivePreview);
+    await refreshHubSpot();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("hubspot-live-preview").innerHTML = `
+      <p class="score-label">Live task write failed</p>
+      <p class="verification-note">${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
 async function handleProbeAiProviderClick() {
   try {
     appState.providerProbe = await probeProvider();
@@ -1730,6 +1777,7 @@ async function main() {
   const saveHubSpotConfigButton = document.getElementById("save-hubspot-config-button");
   const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
   const hubSpotLivePreviewButton = document.getElementById("hubspot-live-preview-button");
+  const hubSpotLiveTaskButton = document.getElementById("hubspot-live-task-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -1789,6 +1837,7 @@ async function main() {
     saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
     exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
     hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
+    hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
     reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
     saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
     applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);

@@ -83,5 +83,6 @@ It now has:
 - live provider probe and focused-deal live draft path
 - HubSpot OAuth config, install URL, and local install persistence
 - live HubSpot deal preview with local token refresh and deterministic normalization
+- live HubSpot task write-back from the deterministic rescue recommendation
 - imported anti-memory and anti-hallucination guardrails translated into product rules
 - strict GDPR deployment gate and operational compliance template

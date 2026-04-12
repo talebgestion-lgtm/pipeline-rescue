@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { loadHubSpotDealPreview } = require("../lib/hubspot-client");
+const { createHubSpotRescueTask, loadHubSpotDealPreview } = require("../lib/hubspot-client");
 
 const validConfig = {
   enabled: true,
@@ -249,4 +249,180 @@ test("loadHubSpotDealPreview refreshes the access token when the stored token is
   assert.equal(refreshed, true);
   assert.equal(preview.source.tokenRefreshed, true);
   assert.equal(preview.installState.installs[0].accessToken, "fresh_token");
+});
+
+test("createHubSpotRescueTask writes an associated HubSpot task from live analysis", async () => {
+  const installState = {
+    installs: [
+      {
+        portalId: "123456",
+        hubDomain: "demo.hubspot.com",
+        accessToken: "access_token",
+        refreshToken: "refresh_token",
+        connectedAt: "2026-04-12T08:00:00Z"
+      }
+    ]
+  };
+
+  const fetchImpl = async (url, options = {}) => {
+    const parsedUrl = new URL(url);
+
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/objects/deals/987") {
+      return createJsonResponse(200, {
+        id: "987",
+        createdAt: "2026-03-01T10:00:00Z",
+        updatedAt: "2026-04-10T10:00:00Z",
+        archived: false,
+        properties: {
+          dealname: "Acme Expansion",
+          amount: "48000",
+          closedate: "2026-05-10",
+          dealstage: "proposal",
+          pipeline: "default",
+          hubspot_owner_id: "44",
+          hs_next_step: "Confirm legal review",
+          hs_lastactivitydate: "2026-03-24T10:00:00Z"
+        }
+      });
+    }
+
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/contacts") {
+      return createJsonResponse(200, {
+        results: [{ toObjectId: 201, associationTypes: [{ label: "Decision maker" }] }]
+      });
+    }
+
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/companies") {
+      return createJsonResponse(200, {
+        results: [{ toObjectId: 301, associationTypes: [] }]
+      });
+    }
+
+    if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/tasks") {
+      return createJsonResponse(200, { results: [] });
+    }
+
+    if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/contacts/batch/read") {
+      return createJsonResponse(200, {
+        results: [{ id: "201", properties: { firstname: "Maya", lastname: "Brooks", email: "maya@acme.example" } }]
+      });
+    }
+
+    if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/companies/batch/read") {
+      return createJsonResponse(200, {
+        results: [{ id: "301", properties: { name: "Acme" } }]
+      });
+    }
+
+    if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks/batch/read") {
+      return createJsonResponse(200, { results: [] });
+    }
+
+    if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks") {
+      const body = JSON.parse(options.body);
+      assert.equal(body.associations.length, 3);
+      assert.equal(body.associations[0].types[0].associationTypeId, 216);
+      assert.equal(body.associations[1].types[0].associationTypeId, 192);
+      assert.equal(body.associations[2].types[0].associationTypeId, 204);
+      assert.equal(body.properties.hubspot_owner_id, "44");
+      assert.match(body.properties.hs_task_body, /Recommended action/);
+
+      return createJsonResponse(201, {
+        id: "task_9001",
+        properties: body.properties
+      });
+    }
+
+    throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+  };
+
+  const preview = await loadHubSpotDealPreview({
+    config: validConfig,
+    installState,
+    dealId: "987",
+    portalId: "123456",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    fetchImpl
+  });
+
+  const result = await createHubSpotRescueTask({
+    config: validConfig,
+    installState: preview.installState,
+    portalId: "123456",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    preview,
+    analysis: {
+      analysis: {
+        dealId: "987",
+        dealName: "Acme Expansion",
+        eligibility: "ELIGIBLE",
+        rescueScore: 86,
+        riskLevel: "CRITICAL",
+        reasons: [
+          {
+            label: "Deal activity is stale",
+            evidence: "No logged activity for 19 days."
+          }
+        ],
+        recommendedAction: {
+          type: "CREATE_NEXT_STEP_TASK",
+          priority: "HIGH",
+          summary: "Define a concrete next step and create a dated task."
+        }
+      },
+      verification: {
+        validationStatus: "VALIDATED"
+      }
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    fetchImpl
+  });
+
+  assert.equal(result.task.taskId, "task_9001");
+  assert.equal(result.task.associatedContactCount, 1);
+  assert.equal(result.task.associatedCompanyCount, 1);
+  assert.equal(result.task.associatedDealId, "987");
+});
+
+test("createHubSpotRescueTask blocks when live analysis is unverified", async () => {
+  await assert.rejects(
+    () => createHubSpotRescueTask({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: { deal: { id: "987" }, companies: [], contacts: [] },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: {
+          dealId: "987",
+          dealName: "Acme Expansion",
+          eligibility: "INSUFFICIENT_DATA",
+          recommendedAction: {
+            type: "CREATE_NEXT_STEP_TASK",
+            priority: "HIGH",
+            summary: "Define a concrete next step and create a dated task."
+          }
+        },
+        verification: {
+          validationStatus: "UNVERIFIED"
+        }
+      },
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async () => createJsonResponse(200, {})
+    }),
+    /not trusted enough/
+  );
 });

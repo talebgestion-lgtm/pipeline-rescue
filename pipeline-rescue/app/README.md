@@ -96,6 +96,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/hubspot/oauth/exchange`
 - `/api/hubspot/oauth/callback`
 - `/api/hubspot/live/deals/123456?portalId=999999`
+- `POST /api/hubspot/live/deals/123456/tasks?portalId=999999`
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
@@ -128,6 +129,7 @@ The UI now supports:
 - a live provider probe and live-draft endpoint for the focused deal
 - a HubSpot OAuth config panel, install URL generator, and manual code exchange path
 - a live HubSpot deal preview path with token refresh and deterministic normalization
+- a live HubSpot task write path tied to the deterministic rescue recommendation
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - a local compliance-config editor for real legal inputs
@@ -198,6 +200,7 @@ HubSpot endpoints:
 - `POST /api/hubspot/oauth/exchange`
 - `GET /api/hubspot/oauth/callback`
 - `GET /api/hubspot/live/deals/:dealId?portalId=...`
+- `POST /api/hubspot/live/deals/:dealId/tasks?portalId=...`
 
 Compliance endpoint:
 
@@ -243,3 +246,4 @@ For HubSpot OAuth:
 3. generate the install URL
 4. complete the install flow or paste the returned code for manual exchange
 5. use `Load Live Deal Preview` with a real HubSpot deal ID to validate the live normalization path
+6. use `Create Live HubSpot Task` only after validating the live preview and recommendation
