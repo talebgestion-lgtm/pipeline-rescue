@@ -148,10 +148,20 @@ async function executeLiveRescueRun({ liveQueue, criteria, portalId, taskWriter 
       writtenTasks.push(writeResult.task);
       decisions.push(createDecisionRecord(deal, "TASK_WRITTEN", "Live HubSpot rescue task created.", writeResult.task));
     } catch (error) {
+      const detail = error.detail || error.message || "Live HubSpot task write failed.";
+      if (error.statusCode === 409 && /already exists/i.test(detail)) {
+        decisions.push(createDecisionRecord(
+          deal,
+          "SKIPPED_EXISTING_RESCUE_TASK",
+          detail
+        ));
+        continue;
+      }
+
       decisions.push(createDecisionRecord(
         deal,
         "FAILED_WRITE",
-        error.detail || error.message || "Live HubSpot task write failed."
+        detail
       ));
     }
   }

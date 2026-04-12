@@ -135,6 +135,7 @@ The UI now supports:
 - a HubSpot OAuth config panel, install URL generator, and manual code exchange path
 - a live HubSpot deal preview path with token refresh and deterministic normalization
 - live HubSpot owner resolution so previews and queue items use real owner names when the Owners API is accessible
+- idempotent live HubSpot task writes that block duplicate open rescue tasks on the same deal
 - a live HubSpot criteria-discovery path to find stale deals without manually collecting IDs
 - a live HubSpot multi-deal queue path for manager-level rescue review
 - a live HubSpot rescue batch path that writes only validated at-risk tasks from the discovered queue

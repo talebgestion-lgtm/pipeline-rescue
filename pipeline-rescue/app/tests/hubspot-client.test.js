@@ -585,6 +585,63 @@ test("createHubSpotRescueTask blocks when live analysis is unverified", async ()
   );
 });
 
+test("createHubSpotRescueTask blocks when an open Pipeline Rescue task already exists", async () => {
+  await assert.rejects(
+    () => createHubSpotRescueTask({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: {
+          deal: { id: "987" },
+          companies: [],
+          contacts: [],
+          tasks: [
+            {
+              id: "task_100",
+              subject: "Pipeline Rescue | Acme Expansion",
+              status: "NOT_STARTED",
+              isOpen: true,
+              isRescueTask: true
+            }
+          ]
+        },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: {
+          dealId: "987",
+          dealName: "Acme Expansion",
+          eligibility: "ELIGIBLE",
+          rescueScore: 86,
+          reasons: [],
+          recommendedAction: {
+            type: "CREATE_NEXT_STEP_TASK",
+            priority: "HIGH",
+            summary: "Define a concrete next step and create a dated task."
+          }
+        },
+        verification: {
+          validationStatus: "VALIDATED"
+        }
+      },
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async () => createJsonResponse(200, {})
+    }),
+    /already exists/
+  );
+});
+
 test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", async () => {
   const preview = {
     source: {

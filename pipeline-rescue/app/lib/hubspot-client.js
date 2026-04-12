@@ -367,21 +367,30 @@ function normalizeTasks(records, referenceTimestamp) {
     const properties = record.properties || {};
     const dueAt = properties.hs_timestamp || null;
     const status = properties.hs_task_status || "UNKNOWN";
+    const subject = properties.hs_task_subject || `Task ${record.id}`;
     const isFutureOpen = Boolean(
       dueAt
       && status !== "COMPLETED"
       && new Date(dueAt).getTime() >= new Date(referenceTimestamp).getTime()
     );
+    const isOpen = status !== "COMPLETED";
+    const isRescueTask = /^Pipeline Rescue \|/i.test(subject);
 
     return {
       id: String(record.id),
-      subject: properties.hs_task_subject || `Task ${record.id}`,
+      subject,
       status,
       dueAt,
       body: properties.hs_task_body || null,
-      isFutureOpen
+      isFutureOpen,
+      isOpen,
+      isRescueTask
     };
   });
+}
+
+function findOpenRescueTask(tasks) {
+  return (Array.isArray(tasks) ? tasks : []).find((task) => task.isRescueTask && task.isOpen) || null;
 }
 
 function formatOwnerDisplayName(ownerRecord, ownerId) {
@@ -479,6 +488,10 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
   } else if (ownerLookupWarning) {
     normalizationWarnings.push(ownerLookupWarning);
   }
+  const existingRescueTask = findOpenRescueTask(tasks);
+  if (existingRescueTask) {
+    normalizationWarnings.push(`An open Pipeline Rescue task already exists on this deal (${existingRescueTask.id}).`);
+  }
 
   const closedWon = toBoolean(properties.hs_is_closed_won) === true || /won/i.test(stageId || "");
   const closedLost = toBoolean(properties.hs_is_closed_lost) === true || /lost/i.test(stageId || "");
@@ -501,6 +514,7 @@ function buildNormalizedDeal({ dealRecord, contacts, companies, tasks, analysisT
     lastActivityAgeDays,
     hasNextStep: Boolean(String(properties.hs_next_step || "").trim()),
     hasFutureTask,
+    hasOpenRescueTask: Boolean(existingRescueTask),
     contacts: contacts.map((contact) => ({
       id: contact.id,
       name: contact.name,
@@ -683,6 +697,15 @@ function buildHubSpotTaskPayload({ preview, analysis, dueAt }) {
 
   if (!analysisPayload.recommendedAction || !analysisPayload.recommendedAction.summary) {
     throw createHubSpotClientError("HubSpot task creation is blocked because no recommended action is available.", 409);
+  }
+
+  const existingRescueTask = findOpenRescueTask(preview.graph?.tasks || []);
+  if (existingRescueTask) {
+    throw createHubSpotClientError(
+      "HubSpot task creation is blocked because an open Pipeline Rescue task already exists on this deal.",
+      409,
+      `Existing rescue task ${existingRescueTask.id}: ${existingRescueTask.subject}`
+    );
   }
 
   const topReason = analysisPayload.reasons && analysisPayload.reasons[0] ? analysisPayload.reasons[0] : null;

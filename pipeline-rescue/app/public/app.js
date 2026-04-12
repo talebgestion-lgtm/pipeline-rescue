@@ -988,6 +988,7 @@ function renderHubSpotLivePreview(preview) {
   const liveTask = preview.hubspotTask || null;
   const liveDraft = preview.liveDraft || null;
   const hubspotNote = preview.hubspotNote || null;
+  const activeRescueTask = tasks.find((task) => task.isRescueTask && task.isOpen) || null;
 
   container.innerHTML = `
     <div class="verification-grid">
@@ -1035,9 +1036,18 @@ function renderHubSpotLivePreview(preview) {
     <div class="verification-block">
       <p class="score-label">Tasks</p>
       <ul class="verification-list">
-        ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
+        ${tasks.map((task) => `<li>${escapeHtml(task.subject)} | ${escapeHtml(task.status)}${task.isRescueTask ? " | rescue task" : ""}${task.dueAt ? ` | ${escapeHtml(new Date(task.dueAt).toLocaleString("en-GB"))}` : ""}</li>`).join("") || "<li>No associated task returned.</li>"}
       </ul>
     </div>
+    ${activeRescueTask ? `
+      <div class="verification-block">
+        <p class="score-label">Active rescue task</p>
+        <ul class="verification-list">
+          <li>${escapeHtml(activeRescueTask.id)} | ${escapeHtml(activeRescueTask.subject)}</li>
+          <li>${escapeHtml(activeRescueTask.status)}${activeRescueTask.dueAt ? ` | ${escapeHtml(new Date(activeRescueTask.dueAt).toLocaleString("en-GB"))}` : ""}</li>
+        </ul>
+      </div>
+    ` : ""}
     ${liveDraft ? `
       <div class="verification-block">
         <p class="score-label">Live draft</p>
