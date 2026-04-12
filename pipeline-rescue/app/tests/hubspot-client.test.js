@@ -792,6 +792,14 @@ test("createHubSpotRescueTask retries a transient HubSpot write failure before s
     fetchImpl: async (url, options = {}) => {
       const parsedUrl = new URL(url);
 
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/tasks") {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks/batch/read") {
+        return createJsonResponse(200, { results: [] });
+      }
+
       if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks") {
         taskWriteAttempts += 1;
         if (taskWriteAttempts === 1) {
@@ -812,6 +820,73 @@ test("createHubSpotRescueTask retries a transient HubSpot write failure before s
   assert.equal(observedSleeps.length, 1);
   assert.ok(observedSleeps[0] >= 250);
   assert.equal(result.task.taskId, "task_9002");
+});
+
+test("createHubSpotRescueTask blocks when current CRM state already has an open rescue task", async () => {
+  await assert.rejects(
+    () => createHubSpotRescueTask({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: { deal: { id: "987" }, companies: [], contacts: [], tasks: [] },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: {
+          dealId: "987",
+          dealName: "Acme Expansion",
+          eligibility: "ELIGIBLE",
+          rescueScore: 86,
+          reasons: [],
+          recommendedAction: {
+            type: "CREATE_NEXT_STEP_TASK",
+            priority: "HIGH",
+            summary: "Define a concrete next step and create a dated task."
+          }
+        },
+        verification: {
+          validationStatus: "VALIDATED"
+        }
+      },
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async (url, options = {}) => {
+        const parsedUrl = new URL(url);
+
+        if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/tasks") {
+          return createJsonResponse(200, { results: [{ toObjectId: 401, associationTypes: [] }] });
+        }
+
+        if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/tasks/batch/read") {
+          return createJsonResponse(200, {
+            results: [
+              {
+                id: "401",
+                properties: {
+                  hs_task_subject: "Pipeline Rescue | Acme Expansion",
+                  hs_task_status: "NOT_STARTED",
+                  hs_timestamp: "2026-04-14T10:00:00Z"
+                }
+              }
+            ]
+          });
+        }
+
+        throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+      }
+    }),
+    /already exists/
+  );
 });
 
 test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", async () => {
@@ -865,6 +940,14 @@ test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", as
     fetchImpl: async (url, options = {}) => {
       const parsedUrl = new URL(url);
 
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/notes") {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/notes/batch/read") {
+        return createJsonResponse(200, { results: [] });
+      }
+
       if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/notes") {
         const body = JSON.parse(options.body);
         assert.equal(body.associations.length, 3);
@@ -888,6 +971,78 @@ test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", as
   assert.equal(result.note.associatedDealId, "987");
   assert.equal(result.note.associatedCompanyCount, 1);
   assert.equal(result.note.associatedContactCount, 1);
+});
+
+test("createHubSpotDraftNote blocks when current CRM state already has an equivalent rescue note", async () => {
+  await assert.rejects(
+    () => createHubSpotDraftNote({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      portalId: "123456",
+      preview: {
+        source: { fetchedAt: "2026-04-12T10:00:00Z" },
+        graph: {
+          deal: { id: "987" },
+          companies: [],
+          contacts: [],
+          notes: []
+        },
+        normalizedDeal: { owner: { id: "44" } }
+      },
+      analysis: {
+        analysis: {
+          dealId: "987",
+          dealName: "Acme Expansion",
+          rescueScore: 86
+        },
+        verification: {
+          validationStatus: "VALIDATED"
+        }
+      },
+      draftResult: {
+        mode: "DETERMINISTIC_LOCAL",
+        draft: {
+          subject: "Quick follow-up on Acme Expansion",
+          body: "Hi Maya, can we confirm the next step tomorrow?"
+        }
+      },
+      env: { HUBSPOT_CLIENT_SECRET: "secret" },
+      fetchImpl: async (url, options = {}) => {
+        const parsedUrl = new URL(url);
+
+        if (options.method === "GET" && parsedUrl.pathname === "/crm/v4/objects/deals/987/associations/notes") {
+          return createJsonResponse(200, { results: [{ toObjectId: 701, associationTypes: [] }] });
+        }
+
+        if (options.method === "POST" && parsedUrl.pathname === "/crm/v3/objects/notes/batch/read") {
+          return createJsonResponse(200, {
+            results: [
+              {
+                id: "701",
+                properties: {
+                  hs_note_body: "<strong>Pipeline Rescue follow-up draft</strong>\nDraft mode: DETERMINISTIC_LOCAL\nVerification status: VALIDATED\nRescue score: 86\nSubject: Quick follow-up on Acme Expansion\n\nHi Maya, can we confirm the next step tomorrow?",
+                  hs_timestamp: "2026-04-12T10:05:00Z",
+                  hubspot_owner_id: "44"
+                }
+              }
+            ]
+          });
+        }
+
+        throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+      }
+    }),
+    /equivalent Pipeline Rescue note already exists/
+  );
 });
 
 test("createHubSpotDraftNote blocks when an equivalent rescue note already exists", async () => {

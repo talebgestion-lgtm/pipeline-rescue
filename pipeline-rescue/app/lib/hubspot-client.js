@@ -521,6 +521,58 @@ function findMatchingRescueNote(notes, draftSubject) {
   )) || null;
 }
 
+async function loadCurrentTaskWriteGuard(liveSession, dealId) {
+  let taskAssociations;
+
+  try {
+    taskAssociations = await liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/tasks`);
+  } catch (error) {
+    throw createHubSpotClientError(
+      "HubSpot task creation is blocked because current deal tasks could not be revalidated.",
+      409,
+      error.detail || error.message
+    );
+  }
+
+  const taskIds = extractAssociationResults(taskAssociations).map((entry) => String(entry.toObjectId));
+  const taskRecords = await batchReadObjects({
+    install: liveSession.getInstall(),
+    objectType: "tasks",
+    ids: taskIds,
+    properties: ["hs_task_subject", "hs_task_status", "hs_timestamp", "hs_task_body"],
+    requestImpl: liveSession.requestWithRefresh
+  });
+
+  const tasks = normalizeTasks(taskRecords, liveSession.analysisTimestamp);
+  return findOpenRescueTask(tasks);
+}
+
+async function loadCurrentNoteWriteGuard(liveSession, dealId, draftSubject) {
+  let noteAssociations;
+
+  try {
+    noteAssociations = await liveSession.requestWithRefresh(`/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/notes`);
+  } catch (error) {
+    throw createHubSpotClientError(
+      "HubSpot note creation is blocked because current deal notes could not be revalidated.",
+      409,
+      error.detail || error.message
+    );
+  }
+
+  const noteIds = extractAssociationResults(noteAssociations).map((entry) => String(entry.toObjectId));
+  const noteRecords = await batchReadObjects({
+    install: liveSession.getInstall(),
+    objectType: "notes",
+    ids: noteIds,
+    properties: ["hs_note_body", "hs_timestamp", "hubspot_owner_id"],
+    requestImpl: liveSession.requestWithRefresh
+  });
+
+  const notes = normalizeNotes(noteRecords);
+  return findMatchingRescueNote(notes, draftSubject);
+}
+
 function formatOwnerDisplayName(ownerRecord, ownerId) {
   if (!ownerRecord) {
     return ownerId ? `Owner ${ownerId}` : "Unassigned";
@@ -1056,6 +1108,15 @@ async function createHubSpotRescueTask(options) {
     dueAt: options.dueAt || null
   });
 
+  const currentRescueTask = await loadCurrentTaskWriteGuard(liveSession, preview.graph.deal.id);
+  if (currentRescueTask) {
+    throw createHubSpotClientError(
+      "HubSpot task creation is blocked because an open Pipeline Rescue task already exists on this deal.",
+      409,
+      `Existing rescue task ${currentRescueTask.id}: ${currentRescueTask.subject}`
+    );
+  }
+
   const result = await liveSession.requestWithRefresh("/crm/v3/objects/tasks", "POST", payload);
   const properties = result.properties || payload.properties;
 
@@ -1142,6 +1203,19 @@ async function createHubSpotDraftNote(options) {
     draftResult: options.draftResult,
     noteAt: options.noteAt || null
   });
+
+  const currentRescueNote = await loadCurrentNoteWriteGuard(
+    liveSession,
+    preview.graph.deal.id,
+    options.draftResult && options.draftResult.draft ? options.draftResult.draft.subject : null
+  );
+  if (currentRescueNote) {
+    throw createHubSpotClientError(
+      "HubSpot note creation is blocked because an equivalent Pipeline Rescue note already exists on this deal.",
+      409,
+      `Existing rescue note ${currentRescueNote.id}: ${currentRescueNote.draftSubject || "Unknown subject"}`
+    );
+  }
 
   const result = await liveSession.requestWithRefresh("/crm/v3/objects/notes", "POST", payload);
   const properties = result.properties || payload.properties;
