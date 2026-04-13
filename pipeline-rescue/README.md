@@ -97,3 +97,4 @@ It now has:
 - live HubSpot draft generation and note write-back for CRM-side execution traces
 - imported anti-memory and anti-hallucination guardrails translated into product rules
 - strict GDPR deployment gate and operational compliance template
+- runtime-first storage separation so portable or deployed instances can keep mutable state outside bundled app files

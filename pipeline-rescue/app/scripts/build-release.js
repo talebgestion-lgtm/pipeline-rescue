@@ -39,9 +39,11 @@ function buildRelease(options = {}) {
   const outputDir = options.outputDir || path.join(appRoot, "release", "pipeline-rescue-portable");
   const packageManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
   const appDir = path.join(outputDir, "app");
+  const runtimeDir = path.join(outputDir, "runtime");
 
   fs.rmSync(outputDir, { recursive: true, force: true });
   ensureDir(appDir);
+  ensureDir(runtimeDir);
 
   for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public"]) {
     copyRecursive(path.join(appRoot, asset), path.join(appDir, asset), {
@@ -54,6 +56,7 @@ function buildRelease(options = {}) {
     `@echo off
 setlocal
 set PORT=4179
+set PIPELINE_RESCUE_RUNTIME_DIR=%~dp0runtime
 cd /d "%~dp0app"
 where node >nul 2>nul
 if errorlevel 1 (
@@ -78,6 +81,9 @@ How to run on Windows:
 2. Open launch-pipeline-rescue.cmd.
 3. The browser opens on http://localhost:4179.
 
+Runtime files are stored in:
+- runtime\\
+
 This package contains:
 - deterministic rescue analysis
 - operator feedback loop
@@ -95,7 +101,8 @@ The application remains deployment-blocked until the real GDPR config is complet
         product: "Pipeline Rescue",
         version: packageManifest.version,
         generatedAt: new Date().toISOString(),
-        entrypoint: "launch-pipeline-rescue.cmd"
+        entrypoint: "launch-pipeline-rescue.cmd",
+        runtimeDir: "runtime"
       },
       null,
       2
@@ -105,6 +112,7 @@ The application remains deployment-blocked until the real GDPR config is complet
   return {
     outputDir,
     appDir,
+    runtimeDir,
     launcherPath: path.join(outputDir, "launch-pipeline-rescue.cmd")
   };
 }

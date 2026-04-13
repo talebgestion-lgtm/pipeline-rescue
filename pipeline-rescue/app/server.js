@@ -1,6 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
+const { ensureRuntimeLayout, resolveAppPaths } = require("./lib/app-paths");
 const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
@@ -32,19 +33,13 @@ const {
 } = require("./lib/hubspot-client");
 const { probeAiProvider, generateLiveDraft } = require("./lib/ai-provider-client");
 
-const rootDir = __dirname;
-const publicDir = path.join(rootDir, "public");
-const dataPath = path.join(rootDir, "data", "scenario-inputs.json");
-const gdprConfigPath = path.join(rootDir, "data", "gdpr-config.json");
-const aiPolicyPath = path.join(rootDir, "data", "ai-policy.json");
-const aiProviderConfigPath = path.join(rootDir, "data", "ai-provider-config.json");
-const hubspotConfigPath = path.join(rootDir, "data", "hubspot-config.json");
-const hubspotInstallStatePath = path.join(rootDir, "data", "hubspot-install-state.json");
-const packagePath = path.join(rootDir, "package.json");
-const envPath = path.join(rootDir, ".env");
+loadEnvFile(path.join(__dirname, ".env"));
+
+const appPaths = resolveAppPaths({ appRoot: __dirname });
+const publicDir = appPaths.publicDir;
 const port = Number(process.env.PORT || 4179);
 
-loadEnvFile(envPath);
+ensureRuntimeLayout(appPaths);
 
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
@@ -61,6 +56,18 @@ function saveJsonAtomic(filePath, payload) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(tempFilePath, JSON.stringify(payload, null, 2));
   fs.renameSync(tempFilePath, filePath);
+}
+
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function readJsonWithFallback(primaryPath, fallbackPath) {
+  if (fs.existsSync(primaryPath)) {
+    return readJsonFile(primaryPath);
+  }
+
+  return readJsonFile(fallbackPath);
 }
 
 function stampMetaVersion(payload, version) {
@@ -337,35 +344,35 @@ function sendFile(response, filePath, extraHeaders = {}) {
 }
 
 function readMockOverview() {
-  return JSON.parse(fs.readFileSync(dataPath, "utf8"));
+  return readJsonFile(appPaths.fixturesPath);
 }
 
 function readGdprConfig() {
-  return JSON.parse(fs.readFileSync(gdprConfigPath, "utf8"));
+  return readJsonWithFallback(appPaths.gdprConfigPath, appPaths.gdprConfigDefaultPath);
 }
 
 function readPackageManifest() {
-  return JSON.parse(fs.readFileSync(packagePath, "utf8"));
+  return readJsonFile(appPaths.packagePath);
 }
 
 function readAiPolicy() {
-  return validateAiPolicyPayload(JSON.parse(fs.readFileSync(aiPolicyPath, "utf8")));
+  return validateAiPolicyPayload(readJsonWithFallback(appPaths.aiPolicyPath, appPaths.aiPolicyDefaultPath));
 }
 
 function readAiProviderConfig() {
-  return validateAiProviderConfigPayload(JSON.parse(fs.readFileSync(aiProviderConfigPath, "utf8")));
+  return validateAiProviderConfigPayload(readJsonWithFallback(appPaths.aiProviderConfigPath, appPaths.aiProviderConfigDefaultPath));
 }
 
 function readHubSpotConfig() {
-  return validateHubSpotConfigPayload(JSON.parse(fs.readFileSync(hubspotConfigPath, "utf8")));
+  return validateHubSpotConfigPayload(readJsonWithFallback(appPaths.hubspotConfigPath, appPaths.hubspotConfigDefaultPath));
 }
 
 function readHubSpotInstallState() {
-  if (!fs.existsSync(hubspotInstallStatePath)) {
+  if (!fs.existsSync(appPaths.hubspotInstallStatePath)) {
     return createDefaultInstallState();
   }
 
-  return normalizeInstallState(JSON.parse(fs.readFileSync(hubspotInstallStatePath, "utf8")));
+  return normalizeInstallState(readJsonFile(appPaths.hubspotInstallStatePath));
 }
 
 function validateComplianceConfigPayload(payload) {
@@ -417,7 +424,9 @@ function bootstrapApplication() {
 
   try {
     const fixtures = readMockOverview();
-    const runtime = createRuntime(fixtures);
+    const runtime = createRuntime(fixtures, {
+      stateFilePath: appPaths.runtimeStatePath
+    });
 
     return {
       packageManifest,
@@ -706,7 +715,7 @@ const server = http.createServer(async (request, response) => {
         code
       });
       const nextInstallState = upsertHubSpotInstall(hubspotState.installState, installRecord);
-      saveJsonAtomic(hubspotInstallStatePath, nextInstallState);
+          saveJsonAtomic(appPaths.hubspotInstallStatePath, nextInstallState);
 
       sendText(
         response,
@@ -744,7 +753,7 @@ const server = http.createServer(async (request, response) => {
       const { preview, overview, dealAnalysis } = liveContext;
 
       if (preview.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, preview.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, preview.installState);
       }
 
       sendJson(response, 200, {
@@ -794,7 +803,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (preview.source.tokenRefreshed || taskWrite.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, taskWrite.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, taskWrite.installState);
       }
 
       sendJson(response, 200, {
@@ -839,7 +848,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (preview.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, preview.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, preview.installState);
       }
 
       sendJson(response, 200, {
@@ -879,7 +888,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (liveQueue.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, liveQueue.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, liveQueue.installState);
       }
 
       sendJson(response, 200, {
@@ -916,7 +925,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (liveSearchResponse.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, liveSearchResponse.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, liveSearchResponse.installState);
       }
 
       sendJson(response, 200, liveSearchResponse.response);
@@ -949,7 +958,7 @@ const server = http.createServer(async (request, response) => {
 
       if (Array.isArray(liveSearchResponse.response.deals) && liveSearchResponse.response.deals.length === 0) {
         if (liveSearchResponse.tokenRefreshed) {
-          saveJsonAtomic(hubspotInstallStatePath, liveSearchResponse.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, liveSearchResponse.installState);
         }
 
         sendJson(response, 200, {
@@ -998,7 +1007,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (rescueRun.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, rescueRun.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, rescueRun.installState);
       }
 
       sendJson(response, 200, {
@@ -1054,7 +1063,7 @@ const server = http.createServer(async (request, response) => {
       });
 
       if (preview.source.tokenRefreshed || noteWrite.source.tokenRefreshed) {
-        saveJsonAtomic(hubspotInstallStatePath, noteWrite.installState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, noteWrite.installState);
       }
 
       sendJson(response, 200, {
@@ -1339,7 +1348,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/compliance/config") {
       const body = validateComplianceConfigPayload(await readJsonBody(request));
       createComplianceReport(body);
-      saveJsonAtomic(gdprConfigPath, body);
+            saveJsonAtomic(appPaths.gdprConfigPath, body);
 
       const refreshedState = getGdprState();
       sendJson(response, 200, {
@@ -1359,7 +1368,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/ai/policy") {
       const body = validateAiPolicyPayload(await readJsonBody(request));
-      saveJsonAtomic(aiPolicyPath, body);
+            saveJsonAtomic(appPaths.aiPolicyPath, body);
 
       const refreshedPolicyState = getAiPolicyState();
       const overview = appState.runtime.getOverview(scenarioId);
@@ -1378,7 +1387,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/ai/provider-config") {
       const body = validateAiProviderConfigPayload(await readJsonBody(request));
-      saveJsonAtomic(aiProviderConfigPath, body);
+            saveJsonAtomic(appPaths.aiProviderConfigPath, body);
 
       const refreshedProviderState = getAiProviderState();
       sendJson(response, 200, {
@@ -1390,7 +1399,7 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "POST" && url.pathname === "/api/hubspot/config") {
       const body = validateHubSpotConfigPayload(await readJsonBody(request));
-      saveJsonAtomic(hubspotConfigPath, body);
+            saveJsonAtomic(appPaths.hubspotConfigPath, body);
       const refreshedHubSpotState = getHubSpotState();
       sendJson(response, 200, {
         config: refreshedHubSpotState.hubspotConfig,
@@ -1414,7 +1423,7 @@ const server = http.createServer(async (request, response) => {
         code: body.code
       });
       const nextInstallState = upsertHubSpotInstall(hubspotState.installState, installRecord);
-      saveJsonAtomic(hubspotInstallStatePath, nextInstallState);
+            saveJsonAtomic(appPaths.hubspotInstallStatePath, nextInstallState);
       const refreshedHubSpotState = getHubSpotState();
 
       sendJson(response, 200, {
@@ -1514,7 +1523,7 @@ const server = http.createServer(async (request, response) => {
   } catch (error) {
     if (error.hubspotTokenRefreshed && error.hubspotInstallState) {
       try {
-        saveJsonAtomic(hubspotInstallStatePath, error.hubspotInstallState);
+          saveJsonAtomic(appPaths.hubspotInstallStatePath, error.hubspotInstallState);
       } catch (persistError) {
         // Best-effort persistence only; preserve the original response.
       }

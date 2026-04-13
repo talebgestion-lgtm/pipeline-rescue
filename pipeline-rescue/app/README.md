@@ -39,6 +39,13 @@ Build a portable Windows release folder:
 npm run build:release
 ```
 
+Use an external runtime directory when mutable state must live outside the bundled app tree:
+
+```powershell
+$env:PIPELINE_RESCUE_RUNTIME_DIR = "C:\PipelineRescueData"
+npm start
+```
+
 ## Scope
 
 It is intentionally:
@@ -152,12 +159,15 @@ The UI now supports:
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots
+- runtime-first storage separation for portable and deployed environments
 
 ## Local state persistence
 
 The pilot runtime now persists local state in:
 
 - `data/runtime-state.json`
+
+If `PIPELINE_RESCUE_RUNTIME_DIR` is set, mutable files are written there instead of `app/data`.
 
 This file stores:
 
