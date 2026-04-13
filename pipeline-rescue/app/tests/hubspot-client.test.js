@@ -24,6 +24,20 @@ const validConfig = {
   preferredAccountId: null
 };
 
+const requiredInstallScope = validConfig.scopes.join(" ");
+
+function createStoredInstall(overrides = {}) {
+  return {
+    portalId: "123456",
+    hubDomain: "demo.hubspot.com",
+    accessToken: "access_token",
+    refreshToken: "refresh_token",
+    scope: requiredInstallScope,
+    connectedAt: "2026-04-12T08:00:00Z",
+    ...overrides
+  };
+}
+
 function createJsonResponse(status, payload, headers = {}) {
   const normalizedHeaders = new Map(
     Object.entries(headers).map(([key, value]) => [String(key).toLowerCase(), String(value)])
@@ -43,15 +57,7 @@ function createJsonResponse(status, payload, headers = {}) {
 
 test("loadHubSpotDealPreview normalizes a live HubSpot deal graph", async () => {
   const installState = {
-    installs: [
-      {
-        portalId: "123456",
-        hubDomain: "demo.hubspot.com",
-        accessToken: "access_token",
-        refreshToken: "refresh_token",
-        connectedAt: "2026-04-12T08:00:00Z"
-      }
-    ]
+    installs: [createStoredInstall()]
   };
 
   const preview = await loadHubSpotDealPreview({
@@ -200,8 +206,8 @@ test("loadHubSpotDealPreview requires portal selection when multiple installs ar
       config: validConfig,
       installState: {
         installs: [
-          { portalId: "1", accessToken: "a", refreshToken: "r1", connectedAt: "2026-04-12T08:00:00Z" },
-          { portalId: "2", accessToken: "b", refreshToken: "r2", connectedAt: "2026-04-12T08:10:00Z" }
+          createStoredInstall({ portalId: "1", accessToken: "a", refreshToken: "r1" }),
+          createStoredInstall({ portalId: "2", accessToken: "b", refreshToken: "r2", connectedAt: "2026-04-12T08:10:00Z" })
         ]
       },
       dealId: "987",
@@ -214,17 +220,40 @@ test("loadHubSpotDealPreview requires portal selection when multiple installs ar
   );
 });
 
+test("loadHubSpotDealPreview blocks when the selected install is missing required scopes", async () => {
+  await assert.rejects(
+    () => loadHubSpotDealPreview({
+      config: validConfig,
+      installState: {
+        installs: [
+          {
+            portalId: "123456",
+            hubDomain: "demo.hubspot.com",
+            accessToken: "access_token",
+            refreshToken: "refresh_token",
+            scope: "oauth crm.objects.deals.read crm.objects.contacts.read crm.objects.tasks.read",
+            connectedAt: "2026-04-12T08:00:00Z"
+          }
+        ]
+      },
+      dealId: "987",
+      portalId: "123456",
+      env: {
+        HUBSPOT_CLIENT_SECRET: "secret"
+      },
+      fetchImpl: async () => createJsonResponse(200, {})
+    }),
+    /fresh OAuth install|missing required scopes/
+  );
+});
+
 test("loadHubSpotDealPreview refreshes the access token when the stored token is expired", async () => {
   const installState = {
     installs: [
-      {
-        portalId: "123456",
-        hubDomain: "demo.hubspot.com",
+      createStoredInstall({
         accessToken: "expired_token",
-        refreshToken: "refresh_token",
-        expiresAt: "2026-04-12T09:59:00Z",
-        connectedAt: "2026-04-12T08:00:00Z"
-      }
+        expiresAt: "2026-04-12T09:59:00Z"
+      })
     ]
   };
 
@@ -305,15 +334,7 @@ test("loadHubSpotDealPreview retries a transient HubSpot rate limit before succe
   const preview = await loadHubSpotDealPreview({
     config: validConfig,
     installState: {
-      installs: [
-        {
-          portalId: "123456",
-          hubDomain: "demo.hubspot.com",
-          accessToken: "access_token",
-          refreshToken: "refresh_token",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
-      ]
+      installs: [createStoredInstall()]
     },
     dealId: "987",
     portalId: "123456",
@@ -382,15 +403,7 @@ test("loadHubSpotDealPreview falls back to synthetic owner when owner lookup is 
   const preview = await loadHubSpotDealPreview({
     config: validConfig,
     installState: {
-      installs: [
-        {
-          portalId: "123456",
-          hubDomain: "demo.hubspot.com",
-          accessToken: "access_token",
-          refreshToken: "refresh_token",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
-      ]
+      installs: [createStoredInstall()]
     },
     dealId: "987",
     portalId: "123456",
@@ -450,15 +463,7 @@ test("searchHubSpotDeals posts deterministic CRM criteria and returns discovered
   const result = await searchHubSpotDeals({
     config: validConfig,
     installState: {
-      installs: [
-        {
-          portalId: "123456",
-          hubDomain: "demo.hubspot.com",
-          accessToken: "access_token",
-          refreshToken: "refresh_token",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
-      ]
+      installs: [createStoredInstall()]
     },
     portalId: "123456",
     analysisTimestamp: "2026-04-12T10:00:00Z",
@@ -501,15 +506,7 @@ test("searchHubSpotDeals posts deterministic CRM criteria and returns discovered
 
 test("createHubSpotRescueTask writes an associated HubSpot task from live analysis", async () => {
   const installState = {
-    installs: [
-      {
-        portalId: "123456",
-        hubDomain: "demo.hubspot.com",
-        accessToken: "access_token",
-        refreshToken: "refresh_token",
-        connectedAt: "2026-04-12T08:00:00Z"
-      }
-    ]
+    installs: [createStoredInstall()]
   };
 
   const fetchImpl = async (url, options = {}) => {
@@ -652,14 +649,7 @@ test("createHubSpotRescueTask blocks when live analysis is unverified", async ()
     () => createHubSpotRescueTask({
       config: validConfig,
       installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
+        installs: [createStoredInstall()]
       },
       portalId: "123456",
       preview: {
@@ -694,14 +684,7 @@ test("createHubSpotRescueTask blocks when an open Pipeline Rescue task already e
     () => createHubSpotRescueTask({
       config: validConfig,
       installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
+        installs: [createStoredInstall()]
       },
       portalId: "123456",
       preview: {
@@ -753,14 +736,7 @@ test("createHubSpotRescueTask retries a transient HubSpot write failure before s
   const result = await createHubSpotRescueTask({
     config: validConfig,
     installState: {
-      installs: [
-        {
-          portalId: "123456",
-          accessToken: "access_token",
-          refreshToken: "refresh_token",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
-      ]
+      installs: [createStoredInstall()]
     },
     portalId: "123456",
     preview: {
@@ -827,13 +803,10 @@ test("createHubSpotRescueTask blocks when current CRM state already has an open 
     config: validConfig,
     installState: {
       installs: [
-        {
-          portalId: "123456",
+        createStoredInstall({
           accessToken: "expired_token",
-          refreshToken: "refresh_token",
-          expiresAt: "2026-04-12T09:59:00Z",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
+          expiresAt: "2026-04-12T09:59:00Z"
+        })
       ]
     },
     portalId: "123456",
@@ -925,14 +898,7 @@ test("createHubSpotDraftNote writes a HubSpot note linked to the deal graph", as
   const result = await createHubSpotDraftNote({
     config: validConfig,
     installState: {
-      installs: [
-        {
-          portalId: "123456",
-          accessToken: "access_token",
-          refreshToken: "refresh_token",
-          connectedAt: "2026-04-12T08:00:00Z"
-        }
-      ]
+      installs: [createStoredInstall()]
     },
     portalId: "123456",
     preview,
@@ -995,14 +961,7 @@ test("createHubSpotDraftNote blocks when current CRM state already has an equiva
     () => createHubSpotDraftNote({
       config: validConfig,
       installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
+        installs: [createStoredInstall()]
       },
       portalId: "123456",
       preview: {
@@ -1067,14 +1026,7 @@ test("createHubSpotDraftNote blocks when an equivalent rescue note already exist
     () => createHubSpotDraftNote({
       config: validConfig,
       installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
+        installs: [createStoredInstall()]
       },
       portalId: "123456",
       preview: {
@@ -1122,14 +1074,7 @@ test("createHubSpotDraftNote blocks when no draft payload is available", async (
     () => createHubSpotDraftNote({
       config: validConfig,
       installState: {
-        installs: [
-          {
-            portalId: "123456",
-            accessToken: "access_token",
-            refreshToken: "refresh_token",
-            connectedAt: "2026-04-12T08:00:00Z"
-          }
-        ]
+        installs: [createStoredInstall()]
       },
       portalId: "123456",
       preview: {

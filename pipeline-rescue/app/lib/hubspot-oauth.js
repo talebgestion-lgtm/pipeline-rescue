@@ -84,12 +84,40 @@ function normalizeInstallState(payload) {
   };
 }
 
+function normalizeGrantedScopes(scopeValue) {
+  if (typeof scopeValue !== "string") {
+    return [];
+  }
+
+  return Array.from(new Set(
+    scopeValue
+      .split(/\s+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ));
+}
+
+function getMissingRequiredScopes(config, installRecord) {
+  const grantedScopes = new Set(normalizeGrantedScopes(installRecord && installRecord.scope));
+  return config.scopes.filter((scope) => !grantedScopes.has(scope));
+}
+
 function createHubSpotStatus({ config, env = process.env, installState = createDefaultInstallState() }) {
   const normalizedConfig = validateHubSpotConfigPayload(config);
   const normalizedInstallState = normalizeInstallState(installState);
   const clientSecretPresent = Boolean(env[normalizedConfig.clientSecretEnvVar]);
   const installCount = normalizedInstallState.installs.length;
   const configReady = Boolean(normalizedConfig.clientId) && Boolean(normalizedConfig.redirectUri) && normalizedConfig.scopes.length > 0;
+  const installsWithScopeCoverage = normalizedInstallState.installs.map((item) => ({
+    ...item,
+    grantedScopes: normalizeGrantedScopes(item.scope),
+    missingRequiredScopes: getMissingRequiredScopes(normalizedConfig, item)
+  }));
+  const preferredInstall = normalizedConfig.preferredAccountId
+    ? installsWithScopeCoverage.find((item) => String(item.portalId) === String(normalizedConfig.preferredAccountId))
+    : null;
+  const compatibleInstallCount = installsWithScopeCoverage.filter((item) => item.missingRequiredScopes.length === 0).length;
+  const selectedInstallMissingScopes = preferredInstall ? preferredInstall.missingRequiredScopes : [];
 
   const blockers = [];
   if (!normalizedConfig.enabled) {
@@ -101,6 +129,12 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
   if (!clientSecretPresent) {
     blockers.push(`Missing ${normalizedConfig.clientSecretEnvVar} in the process environment.`);
   }
+  if (installCount > 0 && compatibleInstallCount === 0) {
+    blockers.push("Stored HubSpot installs are missing one or more required scopes. Reinstall HubSpot with the current scope set.");
+  }
+  if (preferredInstall && selectedInstallMissingScopes.length > 0) {
+    blockers.push(`Preferred HubSpot install ${preferredInstall.portalId} is missing required scopes: ${selectedInstallMissingScopes.join(", ")}.`);
+  }
 
   let status = "DISABLED";
   if (normalizedConfig.enabled && !configReady) {
@@ -109,6 +143,14 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
     status = "CONFIGURED_BLOCKED";
   } else if (normalizedConfig.enabled && configReady && clientSecretPresent && installCount === 0) {
     status = "READY_FOR_INSTALL";
+  } else if (
+    normalizedConfig.enabled
+    && configReady
+    && clientSecretPresent
+    && installCount > 0
+    && (compatibleInstallCount === 0 || selectedInstallMissingScopes.length > 0)
+  ) {
+    status = "REINSTALL_REQUIRED";
   } else if (normalizedConfig.enabled && configReady && clientSecretPresent && installCount > 0) {
     status = "READY";
   }
@@ -120,6 +162,8 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
         ? `HubSpot OAuth is configured and ${installCount} portal install(s) are stored locally.`
         : status === "READY_FOR_INSTALL"
           ? "HubSpot OAuth is configured and ready for the first install."
+          : status === "REINSTALL_REQUIRED"
+            ? "Stored HubSpot installs need a fresh OAuth install to match the current required scopes."
           : status === "CONFIGURED_BLOCKED"
             ? "HubSpot OAuth is partially configured but still blocked."
             : "HubSpot live integration is disabled.",
@@ -143,6 +187,13 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
         status: installCount > 0 ? "PASS" : "WARN",
         label: "Stored installs",
         detail: `${installCount} local install(s) recorded.`
+      },
+      {
+        status: installCount === 0 || compatibleInstallCount > 0 ? "PASS" : "WARN",
+        label: "Required scope coverage",
+        detail: installCount === 0
+          ? "No install stored yet, so scope coverage will be validated at install time."
+          : `${compatibleInstallCount} install(s) satisfy the current required scopes.`
       }
     ],
     blockers,
@@ -155,11 +206,12 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
       optionalScopes: normalizedConfig.optionalScopes,
       preferredAccountId: normalizedConfig.preferredAccountId
     },
-    installs: normalizedInstallState.installs.map((item) => ({
+    installs: installsWithScopeCoverage.map((item) => ({
       portalId: item.portalId,
       hubDomain: item.hubDomain || null,
       connectedAt: item.connectedAt,
-      scope: item.scope || null
+      scope: item.scope || null,
+      missingRequiredScopes: item.missingRequiredScopes
     }))
   };
 }
@@ -258,6 +310,7 @@ module.exports = {
   createDefaultInstallState,
   createHubSpotStatus,
   exchangeHubSpotAuthCode,
+  getMissingRequiredScopes,
   normalizeInstallState,
   validateHubSpotConfigPayload
 };

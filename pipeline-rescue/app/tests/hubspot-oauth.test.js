@@ -4,6 +4,7 @@ const {
   buildHubSpotInstallUrl,
   createHubSpotStatus,
   exchangeHubSpotAuthCode,
+  getMissingRequiredScopes,
   validateHubSpotConfigPayload
 } = require("../lib/hubspot-oauth");
 
@@ -38,6 +39,43 @@ test("createHubSpotStatus reports ready-for-install when config is complete", ()
   });
 
   assert.equal(report.status, "READY_FOR_INSTALL");
+});
+
+test("createHubSpotStatus requires reinstall when stored installs miss required scopes", () => {
+  const report = createHubSpotStatus({
+    config: {
+      ...validConfig,
+      scopes: ["oauth", "crm.objects.deals.read", "crm.objects.notes.write"]
+    },
+    env: { HUBSPOT_CLIENT_SECRET: "secret" },
+    installState: {
+      installs: [
+        {
+          portalId: "123456",
+          scope: "oauth crm.objects.deals.read"
+        }
+      ]
+    }
+  });
+
+  assert.equal(report.status, "REINSTALL_REQUIRED");
+  assert.match(report.summary, /fresh OAuth install/i);
+  assert.deepEqual(report.installs[0].missingRequiredScopes, ["crm.objects.notes.write"]);
+});
+
+test("getMissingRequiredScopes returns the exact missing scope delta", () => {
+  assert.deepEqual(
+    getMissingRequiredScopes(
+      {
+        ...validConfig,
+        scopes: ["oauth", "crm.objects.deals.read", "crm.objects.tasks.write"]
+      },
+      {
+        scope: "oauth crm.objects.deals.read"
+      }
+    ),
+    ["crm.objects.tasks.write"]
+  );
 });
 
 test("exchangeHubSpotAuthCode parses a successful token exchange response", async () => {

@@ -89,6 +89,7 @@ It now has:
 - note-capable HubSpot OAuth defaults and idempotent rescue-note write protection
 - live CRM revalidation just before HubSpot rescue task and note writes
 - refreshed HubSpot install state survives duplicate-write skips and live write failures
+- stored HubSpot installs are now blocked if they no longer satisfy the current required scope set
 - live HubSpot stale-deal discovery by CRM criteria
 - live HubSpot multi-deal queue for manager rescue review
 - live HubSpot rescue batch execution for validated at-risk tasks

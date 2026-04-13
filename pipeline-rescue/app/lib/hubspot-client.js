@@ -1,5 +1,6 @@
 const {
   createHubSpotStatus,
+  getMissingRequiredScopes,
   normalizeInstallState,
   validateHubSpotConfigPayload
 } = require("./hubspot-oauth");
@@ -211,6 +212,15 @@ function ensureHubSpotReady(config, installState, portalId, env = process.env) {
 
   if (!install.accessToken) {
     throw createHubSpotClientError("Stored HubSpot install is missing an access token.", 409);
+  }
+
+  const missingRequiredScopes = getMissingRequiredScopes(normalizedConfig, install);
+  if (missingRequiredScopes.length > 0) {
+    throw createHubSpotClientError(
+      `Stored HubSpot install ${install.portalId} is missing required scopes.`,
+      409,
+      `Missing scopes: ${missingRequiredScopes.join(", ")}`
+    );
   }
 
   return {
