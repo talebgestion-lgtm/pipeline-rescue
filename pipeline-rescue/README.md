@@ -104,3 +104,4 @@ It now has:
 - a controlled support-bundle restore path with automatic backup of mutable runtime files before import
 - a runtime snapshot capture and rollback path for safer pilot recovery
 - single-instance runtime locking so a pilot cannot corrupt the same writable runtime from two parallel processes
+- optional shared-secret access protection so a deployed pilot instance is not left open by default

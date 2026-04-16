@@ -46,6 +46,14 @@ $env:PIPELINE_RESCUE_RUNTIME_DIR = "C:\PipelineRescueData"
 npm start
 ```
 
+Protect a deployed instance with a shared secret:
+
+```powershell
+$env:PIPELINE_RESCUE_ACCESS_MODE = "SHARED_SECRET"
+$env:PIPELINE_RESCUE_ACCESS_TOKEN = "change-this-before-deploying"
+npm start
+```
+
 Bootstrap that runtime directory explicitly when needed:
 
 ```powershell
@@ -117,6 +125,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/hubspot/live/deals/123456/notes?portalId=999999`
 - `/api/compliance/report`
 - `/api/compliance/config`
+- `/api/access/status`
+- `POST /api/access/verify`
 - `/api/system/report`
 - `/api/runtime/support-bundle`
 - `POST /api/runtime/support-bundle/restore`
@@ -172,6 +182,7 @@ The UI now supports:
 - a controlled support-bundle restore flow with runtime backup before import
 - a runtime snapshot catalog with manual capture and rollback
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
+- optional shared-secret access protection for deployed API routes
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots

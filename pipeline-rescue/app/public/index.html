@@ -29,6 +29,23 @@
         </div>
       </section>
 
+      <section class="panel" id="access-panel" hidden>
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Access</p>
+            <h2>Instance access gate</h2>
+          </div>
+        </header>
+        <div class="verification-card" id="access-status"></div>
+        <div class="feedback-export-actions">
+          <input id="access-token-input" class="scenario-select" type="password" placeholder="Shared secret">
+          <button type="button" class="refresh-button" id="access-verify-button">Unlock Instance</button>
+          <button type="button" class="refresh-button secondary-button" id="access-clear-button">Clear Secret</button>
+        </div>
+      </section>
+
+      <div id="protected-app">
+
       <section class="panel">
         <header class="panel-header">
           <div>
@@ -324,6 +341,7 @@
           <div class="queue" id="queue-list"></div>
         </aside>
       </section>
+      </div>
     </main>
 
     <script src="/app.js"></script>

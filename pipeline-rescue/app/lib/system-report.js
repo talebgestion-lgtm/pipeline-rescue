@@ -11,6 +11,7 @@ function createSystemReport(options) {
   const startupError = options.startupError || null;
   const packageManifest = options.packageManifest || {};
   const fixtures = options.fixtures || null;
+  const accessState = options.accessState || null;
   const gdprState = options.gdprState || {};
   const hubspotState = options.hubspotState || {};
   const appPaths = options.appPaths || {};
@@ -21,6 +22,21 @@ function createSystemReport(options) {
   const latestSnapshot = runtimeSnapshots[0] || null;
 
   const checks = [];
+
+  checks.push(
+    buildCheck(
+      "access_control",
+      "Access control",
+      accessState && accessState.status && accessState.status.status === "MISCONFIGURED"
+        ? "FAIL"
+        : accessState && accessState.status && accessState.status.status === "PROTECTED"
+          ? "PASS"
+          : "WARN",
+      accessState && accessState.status
+        ? accessState.status.summary
+        : "Access control state unavailable."
+    )
+  );
 
   checks.push(
     buildCheck(
@@ -122,6 +138,10 @@ function createSystemReport(options) {
     warnings.push(`A stale runtime lock was archived to ${runtimeLock.staleLockArchivePath}.`);
   }
 
+  if (accessState && accessState.status && accessState.status.status === "DISABLED") {
+    warnings.push("Access control is disabled for this instance.");
+  }
+
   if (gdprState.complianceReport && gdprState.complianceReport.status === "BLOCKED_FOR_DEPLOYMENT") {
     warnings.push("GDPR strict mode is blocking deployment until mandatory controls are documented.");
   }
@@ -154,6 +174,14 @@ function createSystemReport(options) {
       bootstrapReportPresent: Boolean(runtimeBootstrapReport),
       bootstrapGeneratedAt: runtimeBootstrapReport ? runtimeBootstrapReport.generatedAt : null
     },
+    access: accessState && accessState.status
+      ? {
+        mode: accessState.status.mode,
+        status: accessState.status.status,
+        protectedRoutes: accessState.status.protectedRoutes,
+        tokenEnvVar: accessState.status.tokenEnvVar
+      }
+      : null,
     failures,
     warnings,
     checks

@@ -6,6 +6,12 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const {
+  createAccessStatus,
+  ensureAccess,
+  readAccessConfig,
+  verifyAccessToken
+} = require("./lib/access-control");
 const { acquireRuntimeLock, releaseRuntimeLock } = require("./lib/runtime-lock");
 const { buildSupportBundle, validateSupportBundlePayload } = require("./lib/support-bundle");
 const {
@@ -591,7 +597,31 @@ function getHubSpotState() {
   }
 }
 
+function getAccessState() {
+  try {
+    const config = readAccessConfig();
+    return {
+      config,
+      status: createAccessStatus(config),
+      error: null
+    };
+  } catch (error) {
+    return {
+      config: null,
+      status: {
+        mode: "SHARED_SECRET",
+        status: "MISCONFIGURED",
+        protectedRoutes: true,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: error.message
+      },
+      error: error.message
+    };
+  }
+}
+
 function buildSystemState(appState) {
+  const accessState = getAccessState();
   const gdprState = getGdprState();
   const aiPolicyState = getAiPolicyState();
   const aiProviderState = getAiProviderState();
@@ -603,6 +633,7 @@ function buildSystemState(appState) {
     fixtures: appState.fixtures,
     gdprState,
     hubspotState,
+    accessState,
     appPaths,
     runtimeBootstrapReport,
     runtimeLock: appState.runtimeLock,
@@ -616,6 +647,7 @@ function buildSystemState(appState) {
     aiPolicyState,
     aiProviderState,
     hubspotState,
+    accessState,
     runtimeBootstrapReport,
     runtimeSnapshots,
     systemReport
@@ -747,6 +779,7 @@ const server = http.createServer(async (request, response) => {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
     const {
+      accessState,
       gdprState,
       aiPolicyState,
       aiProviderState,
@@ -766,6 +799,34 @@ const server = http.createServer(async (request, response) => {
     if (url.pathname === "/health/ready") {
       sendJson(response, systemReport.readiness ? 200 : 503, systemReport);
       return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/access/status") {
+      sendJson(response, 200, accessState.status);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/access/verify") {
+      const body = await readJsonBody(request);
+      const verification = verifyAccessToken(
+        accessState.config,
+        body && typeof body.token === "string" ? body.token : ""
+      );
+
+      if (!verification.ok) {
+        sendJson(response, verification.status.status === "MISCONFIGURED" ? 503 : 401, {
+          error: verification.status.status === "MISCONFIGURED" ? "Access misconfigured" : "Unauthorized",
+          detail: verification.status.summary
+        });
+        return;
+      }
+
+      sendJson(response, 200, verification.status);
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/")) {
+      ensureAccess(request, accessState);
     }
 
     if (request.method === "GET" && url.pathname === "/api/system/report") {

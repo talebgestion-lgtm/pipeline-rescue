@@ -1,3 +1,23 @@
+function readStoredAccessToken() {
+  try {
+    return window.localStorage.getItem("pipelineRescueAccessToken") || "";
+  } catch (_error) {
+    return "";
+  }
+}
+
+function writeStoredAccessToken(token) {
+  try {
+    if (token) {
+      window.localStorage.setItem("pipelineRescueAccessToken", token);
+    } else {
+      window.localStorage.removeItem("pipelineRescueAccessToken");
+    }
+  } catch (_error) {
+    // Ignore storage access failures.
+  }
+}
+
 const appState = {
   catalog: null,
   scenarioId: null,
@@ -11,7 +31,11 @@ const appState = {
   hubspotLivePreview: null,
   hubspotLiveQueue: null,
   hubspotLiveRescueReport: null,
-  runtimeSnapshots: []
+  runtimeSnapshots: [],
+  accessStatus: null,
+  accessGranted: false,
+  accessToken: readStoredAccessToken(),
+  protectedAppBootstrapped: false
 };
 
 function getSearchScenario() {
@@ -19,7 +43,13 @@ function getSearchScenario() {
 }
 
 async function fetchJson(url, options) {
-  const response = await fetch(url, options);
+  const requestOptions = { ...(options || {}) };
+  requestOptions.headers = {
+    ...(options && options.headers ? options.headers : {}),
+    ...(appState.accessToken ? { Authorization: `Bearer ${appState.accessToken}` } : {})
+  };
+
+  const response = await fetch(url, requestOptions);
 
   if (!response.ok) {
     let detail = `Request failed: ${response.status}`;
@@ -36,6 +66,18 @@ async function fetchJson(url, options) {
   }
 
   return response.json();
+}
+
+async function loadAccessStatus() {
+  return fetchJson("/api/access/status");
+}
+
+async function verifyAccessTokenRequest(token) {
+  return fetchJson("/api/access/verify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token })
+  });
 }
 
 function buildScenarioUrl(path) {
@@ -191,7 +233,9 @@ async function resetScenarioState() {
 }
 
 async function downloadBlobFromEndpoint(endpointUrl, filename) {
-  const response = await fetch(endpointUrl);
+  const response = await fetch(endpointUrl, {
+    headers: appState.accessToken ? { Authorization: `Bearer ${appState.accessToken}` } : undefined
+  });
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status}`);
   }
@@ -709,6 +753,7 @@ function renderComplianceReport(report) {
 
 function renderSystemReport(report) {
   const runtime = report.runtime || {};
+  const access = report.access || {};
   document.getElementById("system-report").innerHTML = `
     <div class="verification-grid">
       <article class="verification-metric">
@@ -739,6 +784,15 @@ function renderSystemReport(report) {
       </ul>
     </div>
     <div class="verification-block">
+      <p class="score-label">Access</p>
+      <ul class="verification-list">
+        <li>Mode: ${escapeHtml(access.mode || "unknown")}</li>
+        <li>Status: ${escapeHtml(access.status || "unknown")}</li>
+        <li>Protected routes: ${access.protectedRoutes ? "yes" : "no"}</li>
+        <li>Secret env var: ${escapeHtml(access.tokenEnvVar || "unavailable")}</li>
+      </ul>
+    </div>
+    <div class="verification-block">
       <p class="score-label">Warnings</p>
       <ul class="verification-list">
         ${(report.warnings || []).map((item) => `<li>${item}</li>`).join("") || "<li>No warning reported.</li>"}
@@ -749,6 +803,36 @@ function renderSystemReport(report) {
       <ul class="verification-list">
         ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
       </ul>
+    </div>
+  `;
+}
+
+function renderAccessPanel() {
+  const panel = document.getElementById("access-panel");
+  const statusCard = document.getElementById("access-status");
+  const protectedApp = document.getElementById("protected-app");
+  const accessStatus = appState.accessStatus;
+
+  if (!accessStatus || accessStatus.status === "DISABLED") {
+    panel.hidden = true;
+    protectedApp.hidden = false;
+    return;
+  }
+
+  panel.hidden = false;
+  protectedApp.hidden = !appState.accessGranted;
+  statusCard.innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">Access gate</p>
+      <ul class="verification-list">
+        <li>Mode: ${escapeHtml(accessStatus.mode)}</li>
+        <li>Status: ${escapeHtml(accessStatus.status)}</li>
+        <li>Protected routes: ${accessStatus.protectedRoutes ? "yes" : "no"}</li>
+        <li>${escapeHtml(accessStatus.summary)}</li>
+      </ul>
+      <p class="verification-note">
+        ${appState.accessGranted ? "Access verified for this browser session." : "Enter the shared secret to unlock protected API routes."}
+      </p>
     </div>
   `;
 }
@@ -2331,21 +2415,22 @@ async function handleInstallAppClick() {
   renderInstallState();
 }
 
-async function main() {
-  const select = document.getElementById("scenario-select");
+async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initialScenario) {
+  if (appState.protectedAppBootstrapped) {
+    return;
+  }
+
   const refreshButton = document.getElementById("refresh-button");
   const resetButton = document.getElementById("reset-button");
   const downloadSupportBundleButton = document.getElementById("download-support-bundle-button");
   const restoreSupportBundleButton = document.getElementById("restore-support-bundle-button");
   const createRuntimeSnapshotButton = document.getElementById("create-runtime-snapshot-button");
   const restoreRuntimeSnapshotButton = document.getElementById("restore-runtime-snapshot-button");
-  const queueList = document.getElementById("queue-list");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
   const reloadComplianceConfigButton = document.getElementById("reload-compliance-config-button");
   const saveComplianceConfigButton = document.getElementById("save-compliance-config-button");
   const applyGuidedComplianceButton = document.getElementById("apply-guided-compliance-button");
-  const installAppButton = document.getElementById("install-app-button");
   const reloadAiPolicyButton = document.getElementById("reload-ai-policy-button");
   const saveAiPolicyButton = document.getElementById("save-ai-policy-button");
   const runAiCycleButton = document.getElementById("run-ai-cycle-button");
@@ -2364,7 +2449,125 @@ async function main() {
   const hubSpotLiveQueueButton = document.getElementById("hubspot-live-queue-button");
   const hubSpotLiveSearchButton = document.getElementById("hubspot-live-search-button");
   const hubSpotLiveRescueRunButton = document.getElementById("hubspot-live-rescue-run-button");
+
+  const catalog = await loadScenarios();
+  appState.catalog = catalog;
+  renderSupportBundleStatus(null);
+  await refreshRuntimeSnapshots();
+  const nextInitialScenario = initialScenario || catalog.defaultScenario;
+
+  select.addEventListener("change", async (event) => {
+    await renderScenario(catalog, event.target.value);
+  });
+
+  refreshButton.addEventListener("click", async () => {
+    await renderScenario(catalog, select.value || nextInitialScenario);
+  });
+
+  resetButton.addEventListener("click", handleResetClick);
+  downloadSupportBundleButton.addEventListener("click", handleSupportBundleDownloadClick);
+  createRuntimeSnapshotButton.addEventListener("click", async () => {
+    try {
+      await handleCreateRuntimeSnapshotClick();
+    } catch (error) {
+      renderRuntimeSnapshotError(error);
+    }
+  });
+  restoreRuntimeSnapshotButton.addEventListener("click", async () => {
+    try {
+      await handleRestoreRuntimeSnapshotClick();
+    } catch (error) {
+      renderRuntimeSnapshotError(error);
+    }
+  });
+  restoreSupportBundleButton.addEventListener("click", async () => {
+    try {
+      await handleSupportBundleRestoreClick();
+    } catch (error) {
+      renderSupportBundleError(error);
+    }
+  });
+
+  document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
+  document.getElementById("task-button").addEventListener("click", handleTaskClick);
+  document.getElementById("draft-button").addEventListener("click", handleDraftClick);
+  liveDraftButton.addEventListener("click", handleLiveDraftClick);
+  document.getElementById("feedback-useful-button").addEventListener("click", handleFeedbackUsefulClick);
+  document.getElementById("feedback-dismiss-button").addEventListener("click", handleFeedbackDismissClick);
+  exportJsonButton.addEventListener("click", async () => {
+    await handleFeedbackExportClick("json");
+  });
+  exportCsvButton.addEventListener("click", async () => {
+    await handleFeedbackExportClick("csv");
+  });
+  runAiCycleButton.addEventListener("click", handleRunAiCycleClick);
+  reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
+  saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
+  probeAiProviderButton.addEventListener("click", handleProbeAiProviderClick);
+  reloadAiProviderButton.addEventListener("click", handleReloadAiProviderClick);
+  saveAiProviderButton.addEventListener("click", handleSaveAiProviderClick);
+  hubSpotInstallUrlButton.addEventListener("click", handleHubSpotInstallUrlClick);
+  reloadHubSpotConfigButton.addEventListener("click", handleReloadHubSpotConfigClick);
+  saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
+  exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
+  hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
+  hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
+  hubSpotLiveDraftButton.addEventListener("click", handleHubSpotLiveDraftClick);
+  hubSpotLiveNoteButton.addEventListener("click", handleHubSpotLiveNoteClick);
+  hubSpotLiveQueueButton.addEventListener("click", handleHubSpotLiveQueueClick);
+  hubSpotLiveSearchButton.addEventListener("click", handleHubSpotLiveSearchClick);
+  hubSpotLiveRescueRunButton.addEventListener("click", handleHubSpotLiveRescueRunClick);
+  reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
+  saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
+  applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
+  hubSpotLiveQueuePanel.addEventListener("click", handleHubSpotLiveQueueResultClick);
+
+  queueList.addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-deal-id]");
+    if (!button) {
+      return;
+    }
+
+    appState.liveDraft = null;
+    await renderFocusedDealById(button.dataset.dealId);
+  });
+
+  appState.protectedAppBootstrapped = true;
+  await renderScenario(catalog, nextInitialScenario);
+}
+
+async function handleAccessVerifyClick(select, queueList, hubSpotLiveQueuePanel) {
+  const tokenInput = document.getElementById("access-token-input");
+  const token = tokenInput.value.trim();
+  const status = await verifyAccessTokenRequest(token);
+
+  appState.accessToken = token;
+  appState.accessGranted = status.status === "DISABLED" || status.status === "PROTECTED";
+  appState.accessStatus = status;
+  writeStoredAccessToken(token);
+  renderAccessPanel();
+
+  if (appState.accessGranted) {
+    const initialScenario = getSearchScenario() || null;
+    await bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initialScenario);
+  }
+}
+
+function handleAccessClearClick() {
+  appState.accessToken = "";
+  appState.accessGranted = false;
+  writeStoredAccessToken("");
+  document.getElementById("access-token-input").value = "";
+  renderAccessPanel();
+}
+
+async function main() {
+  const select = document.getElementById("scenario-select");
+  const queueList = document.getElementById("queue-list");
+  const installAppButton = document.getElementById("install-app-button");
   const hubSpotLiveQueuePanel = document.getElementById("hubspot-live-queue");
+  const accessVerifyButton = document.getElementById("access-verify-button");
+  const accessClearButton = document.getElementById("access-clear-button");
 
   try {
     window.addEventListener("beforeinstallprompt", (event) => {
@@ -2386,90 +2589,34 @@ async function main() {
     }
 
     installAppButton.addEventListener("click", handleInstallAppClick);
+    accessVerifyButton.addEventListener("click", async () => {
+      try {
+        await handleAccessVerifyClick(select, queueList, hubSpotLiveQueuePanel);
+      } catch (error) {
+        document.getElementById("access-status").innerHTML = `
+          <p class="verification-note">Access verification failed: ${escapeHtml(error.message)}</p>
+        `;
+      }
+    });
+    accessClearButton.addEventListener("click", handleAccessClearClick);
     await registerInstallShell();
+    appState.accessStatus = await loadAccessStatus();
+    appState.accessGranted = appState.accessStatus.status === "DISABLED";
+    document.getElementById("access-token-input").value = appState.accessToken;
+    renderAccessPanel();
 
-    const catalog = await loadScenarios();
-    renderSupportBundleStatus(null);
-    await refreshRuntimeSnapshots();
-    const initialScenario = getSearchScenario() || catalog.defaultScenario;
-
-    select.addEventListener("change", async (event) => {
-      await renderScenario(catalog, event.target.value);
-    });
-
-    refreshButton.addEventListener("click", async () => {
-      await renderScenario(catalog, select.value || initialScenario);
-    });
-
-    resetButton.addEventListener("click", handleResetClick);
-    downloadSupportBundleButton.addEventListener("click", handleSupportBundleDownloadClick);
-    createRuntimeSnapshotButton.addEventListener("click", async () => {
+    if (appState.accessStatus.status === "PROTECTED" && appState.accessToken) {
       try {
-        await handleCreateRuntimeSnapshotClick();
-      } catch (error) {
-        renderRuntimeSnapshotError(error);
+        await handleAccessVerifyClick(select, queueList, hubSpotLiveQueuePanel);
+      } catch (_error) {
+        appState.accessGranted = false;
+        renderAccessPanel();
       }
-    });
-    restoreRuntimeSnapshotButton.addEventListener("click", async () => {
-      try {
-        await handleRestoreRuntimeSnapshotClick();
-      } catch (error) {
-        renderRuntimeSnapshotError(error);
-      }
-    });
-    restoreSupportBundleButton.addEventListener("click", async () => {
-      try {
-        await handleSupportBundleRestoreClick();
-      } catch (error) {
-        renderSupportBundleError(error);
-      }
-    });
+    } else if (appState.accessGranted) {
+      const initialScenario = getSearchScenario() || null;
+      await bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initialScenario);
+    }
 
-    document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
-    document.getElementById("task-button").addEventListener("click", handleTaskClick);
-    document.getElementById("draft-button").addEventListener("click", handleDraftClick);
-    liveDraftButton.addEventListener("click", handleLiveDraftClick);
-    document.getElementById("feedback-useful-button").addEventListener("click", handleFeedbackUsefulClick);
-    document.getElementById("feedback-dismiss-button").addEventListener("click", handleFeedbackDismissClick);
-    exportJsonButton.addEventListener("click", async () => {
-      await handleFeedbackExportClick("json");
-    });
-    exportCsvButton.addEventListener("click", async () => {
-      await handleFeedbackExportClick("csv");
-    });
-    runAiCycleButton.addEventListener("click", handleRunAiCycleClick);
-    reloadAiPolicyButton.addEventListener("click", handleReloadAiPolicyClick);
-    saveAiPolicyButton.addEventListener("click", handleSaveAiPolicyClick);
-    probeAiProviderButton.addEventListener("click", handleProbeAiProviderClick);
-    reloadAiProviderButton.addEventListener("click", handleReloadAiProviderClick);
-    saveAiProviderButton.addEventListener("click", handleSaveAiProviderClick);
-    hubSpotInstallUrlButton.addEventListener("click", handleHubSpotInstallUrlClick);
-    reloadHubSpotConfigButton.addEventListener("click", handleReloadHubSpotConfigClick);
-    saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
-    exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
-    hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
-    hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
-    hubSpotLiveDraftButton.addEventListener("click", handleHubSpotLiveDraftClick);
-    hubSpotLiveNoteButton.addEventListener("click", handleHubSpotLiveNoteClick);
-    hubSpotLiveQueueButton.addEventListener("click", handleHubSpotLiveQueueClick);
-    hubSpotLiveSearchButton.addEventListener("click", handleHubSpotLiveSearchClick);
-    hubSpotLiveRescueRunButton.addEventListener("click", handleHubSpotLiveRescueRunClick);
-    reloadComplianceConfigButton.addEventListener("click", handleReloadComplianceConfigClick);
-    saveComplianceConfigButton.addEventListener("click", handleSaveComplianceConfigClick);
-    applyGuidedComplianceButton.addEventListener("click", handleApplyGuidedComplianceClick);
-    hubSpotLiveQueuePanel.addEventListener("click", handleHubSpotLiveQueueResultClick);
-
-    queueList.addEventListener("click", async (event) => {
-      const button = event.target.closest("[data-deal-id]");
-      if (!button) {
-        return;
-      }
-
-      appState.liveDraft = null;
-      await renderFocusedDealById(button.dataset.dealId);
-    });
-
-    await renderScenario(catalog, initialScenario);
     renderInstallState();
   } catch (error) {
     document.getElementById("meta-card").innerHTML = `

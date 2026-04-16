@@ -6,6 +6,15 @@ const { createSystemReport } = require("../lib/system-report");
 test("system report is degraded when GDPR blocks deployment", () => {
   const report = createSystemReport({
     packageManifest: { version: "0.3.0" },
+    accessState: {
+      status: {
+        mode: "DISABLED",
+        status: "DISABLED",
+        protectedRoutes: false,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: "Access control is disabled for this instance."
+      }
+    },
     fixtures: {
       defaultScenario: "critical-stalled",
       scenarios: { "critical-stalled": {} }
@@ -39,6 +48,15 @@ test("system report is degraded when GDPR blocks deployment", () => {
 test("system report fails when bootstrap breaks", () => {
   const report = createSystemReport({
     packageManifest: { version: "0.3.0" },
+    accessState: {
+      status: {
+        mode: "SHARED_SECRET",
+        status: "MISCONFIGURED",
+        protectedRoutes: true,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: "Access control is enabled but PIPELINE_RESCUE_ACCESS_TOKEN is missing from the environment."
+      }
+    },
     fixtures: null,
     gdprState: {
       complianceReport: null,
@@ -51,6 +69,7 @@ test("system report fails when bootstrap breaks", () => {
   assert.equal(report.status, "ERROR");
   assert.equal(report.readiness, false);
   assert.ok(report.failures.some((failure) => failure.code === "bootstrap"));
+  assert.ok(report.failures.some((failure) => failure.code === "access_control"));
 });
 
 test("system report warns when external runtime storage has no bootstrap report", () => {
@@ -76,6 +95,15 @@ test("system report warns when external runtime storage has no bootstrap report"
       runtimeStorageMode: "EXTERNAL_RUNTIME_DIR",
       runtimeDir: "C:\\PipelineRescueData"
     },
+    accessState: {
+      status: {
+        mode: "SHARED_SECRET",
+        status: "PROTECTED",
+        protectedRoutes: true,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: "Access control is enabled."
+      }
+    },
     runtimeBootstrapReport: null,
     runtimeDiagnostics: {
       stateFilePath: "C:\\PipelineRescueData\\runtime-state.json",
@@ -95,6 +123,15 @@ test("system report warns when external runtime storage has no bootstrap report"
 test("system report exposes runtime snapshot summary", () => {
   const report = createSystemReport({
     packageManifest: { version: "0.27.0" },
+    accessState: {
+      status: {
+        mode: "SHARED_SECRET",
+        status: "PROTECTED",
+        protectedRoutes: true,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: "Access control is enabled."
+      }
+    },
     fixtures: {
       defaultScenario: "critical-stalled",
       scenarios: { "critical-stalled": {} }
@@ -145,6 +182,8 @@ test("system report exposes runtime snapshot summary", () => {
   assert.equal(report.runtime.latestSnapshotAt, "2026-04-16T20:00:00.000Z");
   assert.equal(report.runtime.runtimeLockStatus, "ACQUIRED");
   assert.equal(report.runtime.runtimeLockOwnerPid, 4242);
+  assert.equal(report.access.mode, "SHARED_SECRET");
+  assert.equal(report.access.status, "PROTECTED");
 });
 
 test("system report fails when runtime lock is blocked by another process", () => {
@@ -156,6 +195,15 @@ test("system report fails when runtime lock is blocked by another process", () =
       error: null
     },
     hubspotState: {},
+    accessState: {
+      status: {
+        mode: "SHARED_SECRET",
+        status: "PROTECTED",
+        protectedRoutes: true,
+        tokenEnvVar: "PIPELINE_RESCUE_ACCESS_TOKEN",
+        summary: "Access control is enabled."
+      }
+    },
     appPaths: {
       runtimeStorageMode: "EXTERNAL_RUNTIME_DIR",
       runtimeDir: "C:\\PipelineRescueData",
