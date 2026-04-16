@@ -171,6 +171,7 @@ The UI now supports:
 - a downloadable support bundle that captures runtime state, system diagnostics, configs, and sanitized HubSpot install metadata
 - a controlled support-bundle restore flow with runtime backup before import
 - a runtime snapshot catalog with manual capture and rollback
+- single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots

@@ -103,3 +103,4 @@ It now has:
 - a support-bundle export path for pilot diagnostics, migration, and customer support without machine-by-machine inspection
 - a controlled support-bundle restore path with automatic backup of mutable runtime files before import
 - a runtime snapshot capture and rollback path for safer pilot recovery
+- single-instance runtime locking so a pilot cannot corrupt the same writable runtime from two parallel processes

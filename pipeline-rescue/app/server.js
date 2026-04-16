@@ -6,6 +6,7 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const { acquireRuntimeLock, releaseRuntimeLock } = require("./lib/runtime-lock");
 const { buildSupportBundle, validateSupportBundlePayload } = require("./lib/support-bundle");
 const {
   createRuntimeSnapshot,
@@ -486,8 +487,10 @@ function readJsonBody(request) {
 
 function bootstrapApplication() {
   const packageManifest = readPackageManifest();
+  let runtimeLock = null;
 
   try {
+    runtimeLock = acquireRuntimeLock(appPaths);
     const fixtures = readMockOverview();
     const runtime = createRuntime(fixtures, {
       stateFilePath: appPaths.runtimeStatePath
@@ -497,13 +500,19 @@ function bootstrapApplication() {
       packageManifest,
       fixtures,
       runtime,
+      runtimeLock,
       startupError: null
     };
   } catch (error) {
+    if (runtimeLock) {
+      releaseRuntimeLock(runtimeLock);
+    }
+
     return {
       packageManifest,
       fixtures: null,
       runtime: null,
+      runtimeLock: error.runtimeLockState || null,
       startupError: error.message
     };
   }
@@ -596,6 +605,7 @@ function buildSystemState(appState) {
     hubspotState,
     appPaths,
     runtimeBootstrapReport,
+    runtimeLock: appState.runtimeLock,
     runtimeSnapshots,
     runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
     startupError: appState.startupError
@@ -690,6 +700,34 @@ function ensureRuntimeAvailable(appState, response) {
 }
 
 const appState = bootstrapApplication();
+
+function registerRuntimeLockCleanup(lockState) {
+  if (!lockState || lockState.status !== "ACQUIRED") {
+    return;
+  }
+
+  let released = false;
+  const cleanup = () => {
+    if (released) {
+      return;
+    }
+
+    released = true;
+    releaseRuntimeLock(lockState);
+  };
+
+  process.on("exit", cleanup);
+  process.on("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
+}
+
+registerRuntimeLockCleanup(appState.runtimeLock);
 
 function upsertHubSpotInstall(installState, installRecord) {
   const nextState = normalizeInstallState(installState);

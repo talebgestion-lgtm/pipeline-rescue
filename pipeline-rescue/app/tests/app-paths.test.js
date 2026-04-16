@@ -11,6 +11,7 @@ test("resolveAppPaths defaults runtime storage to bundled app data", () => {
   assert.equal(appPaths.runtimeDir, path.join(appRoot, "data"));
   assert.equal(appPaths.runtimeBackupsDir, path.join(appRoot, "data", "backups"));
   assert.equal(appPaths.runtimeSnapshotsDir, path.join(appRoot, "data", "snapshots"));
+  assert.equal(appPaths.runtimeLockPath, path.join(appRoot, "data", "runtime.lock.json"));
   assert.equal(appPaths.runtimeStatePath, path.join(appRoot, "data", "runtime-state.json"));
   assert.equal(appPaths.bootstrapReportPath, path.join(appRoot, "data", "bootstrap-report.json"));
   assert.equal(appPaths.fixturesPath, path.join(appRoot, "data", "scenario-inputs.json"));
@@ -27,6 +28,7 @@ test("resolveAppPaths supports an external runtime directory override", () => {
   assert.equal(appPaths.runtimeDir, path.join(appRoot, "runtime"));
   assert.equal(appPaths.runtimeBackupsDir, path.join(appRoot, "runtime", "backups"));
   assert.equal(appPaths.runtimeSnapshotsDir, path.join(appRoot, "runtime", "snapshots"));
+  assert.equal(appPaths.runtimeLockPath, path.join(appRoot, "runtime", "runtime.lock.json"));
   assert.equal(appPaths.gdprConfigPath, path.join(appRoot, "runtime", "gdpr-config.json"));
   assert.equal(appPaths.bootstrapReportPath, path.join(appRoot, "runtime", "bootstrap-report.json"));
   assert.equal(appPaths.fixturesPath, path.join(appRoot, "data", "scenario-inputs.json"));

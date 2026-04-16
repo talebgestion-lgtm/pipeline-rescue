@@ -113,7 +113,15 @@ test("system report exposes runtime snapshot summary", () => {
     },
     appPaths: {
       runtimeStorageMode: "IN_PLACE",
-      runtimeDir: "C:\\PipelineRescue\\data"
+      runtimeDir: "C:\\PipelineRescue\\data",
+      runtimeLockPath: "C:\\PipelineRescue\\data\\runtime.lock.json"
+    },
+    runtimeLock: {
+      status: "ACQUIRED",
+      lockPath: "C:\\PipelineRescue\\data\\runtime.lock.json",
+      owner: {
+        pid: 4242
+      }
     },
     runtimeSnapshots: [
       {
@@ -135,4 +143,36 @@ test("system report exposes runtime snapshot summary", () => {
   assert.equal(report.runtime.snapshotCount, 1);
   assert.equal(report.runtime.latestSnapshotId, "snapshot-2026-04-16T20-00-00-000Z");
   assert.equal(report.runtime.latestSnapshotAt, "2026-04-16T20:00:00.000Z");
+  assert.equal(report.runtime.runtimeLockStatus, "ACQUIRED");
+  assert.equal(report.runtime.runtimeLockOwnerPid, 4242);
+});
+
+test("system report fails when runtime lock is blocked by another process", () => {
+  const report = createSystemReport({
+    packageManifest: { version: "0.28.0" },
+    fixtures: null,
+    gdprState: {
+      complianceReport: null,
+      error: null
+    },
+    hubspotState: {},
+    appPaths: {
+      runtimeStorageMode: "EXTERNAL_RUNTIME_DIR",
+      runtimeDir: "C:\\PipelineRescueData",
+      runtimeLockPath: "C:\\PipelineRescueData\\runtime.lock.json"
+    },
+    runtimeLock: {
+      status: "BLOCKED",
+      lockPath: "C:\\PipelineRescueData\\runtime.lock.json",
+      owner: {
+        pid: 9999
+      }
+    },
+    runtimeBootstrapReport: null,
+    runtimeDiagnostics: null,
+    startupError: "Runtime directory is already locked by process 9999."
+  });
+
+  assert.equal(report.status, "ERROR");
+  assert.ok(report.failures.some((failure) => failure.code === "runtime_lock"));
 });

@@ -16,6 +16,7 @@ function createSystemReport(options) {
   const appPaths = options.appPaths || {};
   const runtimeBootstrapReport = options.runtimeBootstrapReport || null;
   const runtimeDiagnostics = options.runtimeDiagnostics || null;
+  const runtimeLock = options.runtimeLock || null;
   const runtimeSnapshots = Array.isArray(options.runtimeSnapshots) ? options.runtimeSnapshots : [];
   const latestSnapshot = runtimeSnapshots[0] || null;
 
@@ -53,6 +54,19 @@ function createSystemReport(options) {
             : `External runtime dir ${appPaths.runtimeDir}. Bootstrap report not found yet.`
           : `Bundled runtime dir ${appPaths.runtimeDir}.`
         : "Runtime path information unavailable."
+    )
+  );
+
+  checks.push(
+    buildCheck(
+      "runtime_lock",
+      "Runtime lock ownership",
+      runtimeLock && runtimeLock.status === "BLOCKED" ? "FAIL" : "PASS",
+      runtimeLock
+        ? runtimeLock.status === "ACQUIRED"
+          ? `Runtime lock owned by process ${runtimeLock.owner.pid} at ${runtimeLock.lockPath}.`
+          : `Runtime lock blocked by process ${runtimeLock.owner && runtimeLock.owner.pid ? runtimeLock.owner.pid : "unknown"} at ${runtimeLock.lockPath}.`
+        : "Runtime lock state unavailable."
     )
   );
 
@@ -104,6 +118,10 @@ function createSystemReport(options) {
     warnings.push("External runtime storage is enabled but no bootstrap report was found yet.");
   }
 
+  if (runtimeLock && runtimeLock.status === "ACQUIRED" && runtimeLock.staleLockArchivePath) {
+    warnings.push(`A stale runtime lock was archived to ${runtimeLock.staleLockArchivePath}.`);
+  }
+
   if (gdprState.complianceReport && gdprState.complianceReport.status === "BLOCKED_FOR_DEPLOYMENT") {
     warnings.push("GDPR strict mode is blocking deployment until mandatory controls are documented.");
   }
@@ -127,6 +145,9 @@ function createSystemReport(options) {
       storageMode: appPaths.runtimeStorageMode || "unknown",
       runtimeDir: appPaths.runtimeDir || null,
       runtimeStatePath: runtimeDiagnostics ? runtimeDiagnostics.stateFilePath : null,
+      runtimeLockPath: runtimeLock ? runtimeLock.lockPath : (appPaths.runtimeLockPath || null),
+      runtimeLockStatus: runtimeLock ? runtimeLock.status : "unknown",
+      runtimeLockOwnerPid: runtimeLock && runtimeLock.owner ? runtimeLock.owner.pid || null : null,
       snapshotCount: runtimeSnapshots.length,
       latestSnapshotAt: latestSnapshot ? latestSnapshot.createdAt : null,
       latestSnapshotId: latestSnapshot ? latestSnapshot.snapshotId : null,

@@ -4,6 +4,7 @@
 !pipeline-rescue/
 !pipeline-rescue/**
 pipeline-rescue/app/data/runtime-state.json
+pipeline-rescue/app/data/runtime.lock.json
 pipeline-rescue/app/release/
 pipeline-rescue/app/.env
 pipeline-rescue/app/data/hubspot-install-state.json
