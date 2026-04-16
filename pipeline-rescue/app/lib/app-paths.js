@@ -25,6 +25,7 @@ function resolveAppPaths(options = {}) {
     bundledDataDir,
     runtimeDir,
     runtimeBackupsDir: path.join(runtimeDir, "backups"),
+    runtimeSnapshotsDir: path.join(runtimeDir, "snapshots"),
     runtimeLogsDir: path.join(runtimeDir, "logs"),
     bootstrapReportPath: path.join(runtimeDir, "bootstrap-report.json"),
     runtimeStorageMode: path.resolve(runtimeDir) === path.resolve(bundledDataDir)
@@ -49,6 +50,7 @@ function resolveAppPaths(options = {}) {
 function ensureRuntimeLayout(appPaths) {
   fs.mkdirSync(appPaths.runtimeDir, { recursive: true });
   fs.mkdirSync(appPaths.runtimeBackupsDir, { recursive: true });
+  fs.mkdirSync(appPaths.runtimeSnapshotsDir, { recursive: true });
   fs.mkdirSync(appPaths.runtimeLogsDir, { recursive: true });
 }
 

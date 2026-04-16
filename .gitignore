@@ -7,4 +7,7 @@ pipeline-rescue/app/data/runtime-state.json
 pipeline-rescue/app/release/
 pipeline-rescue/app/.env
 pipeline-rescue/app/data/hubspot-install-state.json
+pipeline-rescue/app/data/backups/
+pipeline-rescue/app/data/logs/
+pipeline-rescue/app/data/snapshots/
 pipeline-rescue/app/runtime/

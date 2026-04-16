@@ -16,6 +16,8 @@ function createSystemReport(options) {
   const appPaths = options.appPaths || {};
   const runtimeBootstrapReport = options.runtimeBootstrapReport || null;
   const runtimeDiagnostics = options.runtimeDiagnostics || null;
+  const runtimeSnapshots = Array.isArray(options.runtimeSnapshots) ? options.runtimeSnapshots : [];
+  const latestSnapshot = runtimeSnapshots[0] || null;
 
   const checks = [];
 
@@ -125,6 +127,9 @@ function createSystemReport(options) {
       storageMode: appPaths.runtimeStorageMode || "unknown",
       runtimeDir: appPaths.runtimeDir || null,
       runtimeStatePath: runtimeDiagnostics ? runtimeDiagnostics.stateFilePath : null,
+      snapshotCount: runtimeSnapshots.length,
+      latestSnapshotAt: latestSnapshot ? latestSnapshot.createdAt : null,
+      latestSnapshotId: latestSnapshot ? latestSnapshot.snapshotId : null,
       bootstrapReportPresent: Boolean(runtimeBootstrapReport),
       bootstrapGeneratedAt: runtimeBootstrapReport ? runtimeBootstrapReport.generatedAt : null
     },

@@ -120,6 +120,9 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/system/report`
 - `/api/runtime/support-bundle`
 - `POST /api/runtime/support-bundle/restore`
+- `/api/runtime/snapshots`
+- `POST /api/runtime/snapshots`
+- `POST /api/runtime/snapshots/:snapshotId/restore`
 - `/health/live`
 - `/health/ready`
 
@@ -167,6 +170,7 @@ The UI now supports:
 - runtime diagnostics that expose the active storage mode, runtime directory, and bootstrap-report status
 - a downloadable support bundle that captures runtime state, system diagnostics, configs, and sanitized HubSpot install metadata
 - a controlled support-bundle restore flow with runtime backup before import
+- a runtime snapshot catalog with manual capture and rollback
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots

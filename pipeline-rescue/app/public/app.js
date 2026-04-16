@@ -10,7 +10,8 @@ const appState = {
   liveDraft: null,
   hubspotLivePreview: null,
   hubspotLiveQueue: null,
-  hubspotLiveRescueReport: null
+  hubspotLiveRescueReport: null,
+  runtimeSnapshots: []
 };
 
 function getSearchScenario() {
@@ -227,6 +228,24 @@ async function restoreSupportBundle(payload) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
+  });
+}
+
+async function loadRuntimeSnapshots() {
+  return fetchJson("/api/runtime/snapshots");
+}
+
+async function createRuntimeSnapshotRequest(reason) {
+  return fetchJson("/api/runtime/snapshots", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason })
+  });
+}
+
+async function restoreRuntimeSnapshotRequest(snapshotId) {
+  return fetchJson(`/api/runtime/snapshots/${encodeURIComponent(snapshotId)}/restore`, {
+    method: "POST"
   });
 }
 
@@ -710,6 +729,8 @@ function renderSystemReport(report) {
       <ul class="verification-list">
         <li>Directory: ${escapeHtml(runtime.runtimeDir || "unavailable")}</li>
         <li>State file: ${escapeHtml(runtime.runtimeStatePath || "unavailable")}</li>
+        <li>Snapshots: ${escapeHtml(runtime.snapshotCount ?? 0)}</li>
+        <li>Latest snapshot: ${escapeHtml(runtime.latestSnapshotAt || "none")}</li>
         <li>Bootstrap report: ${runtime.bootstrapReportPresent ? "present" : "missing"}</li>
         <li>Bootstrap generated at: ${escapeHtml(runtime.bootstrapGeneratedAt || "not yet generated")}</li>
       </ul>
@@ -724,6 +745,43 @@ function renderSystemReport(report) {
       <p class="score-label">Checks</p>
       <ul class="verification-list">
         ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderRuntimeSnapshots(payload) {
+  const select = document.getElementById("runtime-snapshot-select");
+  const container = document.getElementById("runtime-snapshot-status");
+  const snapshots = Array.isArray(payload && payload.snapshots) ? payload.snapshots : [];
+  appState.runtimeSnapshots = snapshots;
+
+  select.innerHTML = snapshots.length > 0
+    ? snapshots.map((snapshot) => `
+      <option value="${escapeHtml(snapshot.snapshotId)}">
+        ${escapeHtml(snapshot.createdAt || snapshot.snapshotId)} | ${escapeHtml(snapshot.reason || "manual")}
+      </option>
+    `).join("")
+    : '<option value="">No snapshot available</option>';
+  select.disabled = snapshots.length === 0;
+
+  if (snapshots.length === 0) {
+    container.innerHTML = `
+      <p class="verification-note">No runtime snapshot has been created yet.</p>
+    `;
+    return;
+  }
+
+  const latest = snapshots[0];
+  container.innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">Latest runtime snapshot</p>
+      <ul class="verification-list">
+        <li>ID: ${escapeHtml(latest.snapshotId)}</li>
+        <li>Created at: ${escapeHtml(latest.createdAt || "unknown")}</li>
+        <li>Reason: ${escapeHtml(latest.reason || "manual")}</li>
+        <li>Version: ${escapeHtml(latest.version || "unknown")}</li>
+        <li>System status: ${escapeHtml(latest.systemStatus || "unknown")}</li>
       </ul>
     </div>
   `;
@@ -1588,6 +1646,10 @@ async function refreshSystemReport() {
   renderSystemReport(await loadSystemReport());
 }
 
+async function refreshRuntimeSnapshots() {
+  renderRuntimeSnapshots(await loadRuntimeSnapshots());
+}
+
 function getFeedbackPayload() {
   const reasonCode = document.getElementById("feedback-reason-select").value || null;
   const note = document.getElementById("feedback-note-input").value.trim() || null;
@@ -1728,6 +1790,29 @@ async function handleSupportBundleDownloadClick() {
   await downloadSupportBundle();
 }
 
+async function handleCreateRuntimeSnapshotClick() {
+  const reasonInput = document.getElementById("runtime-snapshot-reason");
+  const response = await createRuntimeSnapshotRequest(reasonInput.value.trim() || "Manual snapshot from UI");
+  reasonInput.value = "";
+  renderRuntimeSnapshots({ snapshots: response.snapshots || [] });
+  renderSystemReport(response.systemReport);
+}
+
+async function handleRestoreRuntimeSnapshotClick() {
+  const select = document.getElementById("runtime-snapshot-select");
+  const snapshotId = select.value;
+
+  if (!snapshotId) {
+    throw new Error("Select a runtime snapshot before restoring.");
+  }
+
+  const response = await restoreRuntimeSnapshotRequest(snapshotId);
+  renderSupportBundleStatus(response);
+  renderRuntimeSnapshots({ snapshots: response.runtimeSnapshots || [] });
+  renderSystemReport(response.systemReport);
+  await renderScenario(appState.catalog, appState.scenarioId);
+}
+
 async function handleSupportBundleRestoreClick() {
   const fileInput = document.getElementById("restore-support-bundle-input");
   const selectedFile = fileInput.files && fileInput.files[0];
@@ -1740,6 +1825,8 @@ async function handleSupportBundleRestoreClick() {
   const payload = JSON.parse(raw);
   const response = await restoreSupportBundle(payload);
   renderSupportBundleStatus(response);
+  renderRuntimeSnapshots({ snapshots: response.runtimeSnapshots || [] });
+  renderSystemReport(response.systemReport);
   fileInput.value = "";
   await renderScenario(appState.catalog, appState.scenarioId);
 }
@@ -1748,6 +1835,13 @@ function renderSupportBundleError(error) {
   const container = document.getElementById("support-bundle-status");
   container.innerHTML = `
     <p class="verification-note">Support bundle restore failed: ${escapeHtml(error.message)}</p>
+  `;
+}
+
+function renderRuntimeSnapshotError(error) {
+  const container = document.getElementById("runtime-snapshot-status");
+  container.innerHTML = `
+    <p class="verification-note">Runtime snapshot action failed: ${escapeHtml(error.message)}</p>
   `;
 }
 
@@ -1764,6 +1858,7 @@ function renderSupportBundleStatus(payload) {
   container.innerHTML = `
     <div class="verification-block">
       <p class="score-label">Support restore</p>
+      <p class="verification-note">Source: ${escapeHtml(payload.restoreReport?.sourceLabel || "support-bundle")}</p>
       <p class="verification-note">Backup dir: ${escapeHtml(payload.restoreReport?.backupDir || "unavailable")}</p>
       <p class="verification-note">Restore report: ${escapeHtml(payload.restoreReport?.reportPath || "unavailable")}</p>
       <ul class="verification-list">
@@ -2239,6 +2334,8 @@ async function main() {
   const resetButton = document.getElementById("reset-button");
   const downloadSupportBundleButton = document.getElementById("download-support-bundle-button");
   const restoreSupportBundleButton = document.getElementById("restore-support-bundle-button");
+  const createRuntimeSnapshotButton = document.getElementById("create-runtime-snapshot-button");
+  const restoreRuntimeSnapshotButton = document.getElementById("restore-runtime-snapshot-button");
   const queueList = document.getElementById("queue-list");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
@@ -2290,6 +2387,7 @@ async function main() {
 
     const catalog = await loadScenarios();
     renderSupportBundleStatus(null);
+    await refreshRuntimeSnapshots();
     const initialScenario = getSearchScenario() || catalog.defaultScenario;
 
     select.addEventListener("change", async (event) => {
@@ -2302,6 +2400,20 @@ async function main() {
 
     resetButton.addEventListener("click", handleResetClick);
     downloadSupportBundleButton.addEventListener("click", handleSupportBundleDownloadClick);
+    createRuntimeSnapshotButton.addEventListener("click", async () => {
+      try {
+        await handleCreateRuntimeSnapshotClick();
+      } catch (error) {
+        renderRuntimeSnapshotError(error);
+      }
+    });
+    restoreRuntimeSnapshotButton.addEventListener("click", async () => {
+      try {
+        await handleRestoreRuntimeSnapshotClick();
+      } catch (error) {
+        renderRuntimeSnapshotError(error);
+      }
+    });
     restoreSupportBundleButton.addEventListener("click", async () => {
       try {
         await handleSupportBundleRestoreClick();
