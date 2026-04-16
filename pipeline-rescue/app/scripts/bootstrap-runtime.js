@@ -72,7 +72,7 @@ function bootstrapRuntime(options = {}) {
     bootstrapVersion: 1
   };
 
-  writeJsonAtomic(path.join(appPaths.runtimeDir, "bootstrap-report.json"), report);
+  writeJsonAtomic(appPaths.bootstrapReportPath, report);
 
   return {
     appPaths,

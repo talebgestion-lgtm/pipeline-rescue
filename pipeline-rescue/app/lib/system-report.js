@@ -13,6 +13,8 @@ function createSystemReport(options) {
   const fixtures = options.fixtures || null;
   const gdprState = options.gdprState || {};
   const hubspotState = options.hubspotState || {};
+  const appPaths = options.appPaths || {};
+  const runtimeBootstrapReport = options.runtimeBootstrapReport || null;
   const runtimeDiagnostics = options.runtimeDiagnostics || null;
 
   const checks = [];
@@ -39,11 +41,26 @@ function createSystemReport(options) {
 
   checks.push(
     buildCheck(
+      "runtime_layout",
+      "Runtime storage layout",
+      appPaths.runtimeStorageMode === "EXTERNAL_RUNTIME_DIR" && !runtimeBootstrapReport ? "WARN" : "PASS",
+      appPaths.runtimeDir
+        ? appPaths.runtimeStorageMode === "EXTERNAL_RUNTIME_DIR"
+          ? runtimeBootstrapReport
+            ? `External runtime dir ${appPaths.runtimeDir}. Bootstrap report generated at ${runtimeBootstrapReport.generatedAt}.`
+            : `External runtime dir ${appPaths.runtimeDir}. Bootstrap report not found yet.`
+          : `Bundled runtime dir ${appPaths.runtimeDir}.`
+        : "Runtime path information unavailable."
+    )
+  );
+
+  checks.push(
+    buildCheck(
       "runtime_state",
       "Runtime state storage",
       runtimeDiagnostics && runtimeDiagnostics.lastPersistSucceeded !== false ? "PASS" : "FAIL",
       runtimeDiagnostics
-        ? `State file ${runtimeDiagnostics.stateFilePath}. Recovered corrupt state: ${Boolean(runtimeDiagnostics.stateLoadRecovered)}.`
+        ? `State file ${runtimeDiagnostics.stateFilePath}. Recovered corrupt state: ${Boolean(runtimeDiagnostics.stateLoadRecovered)}. Storage mode: ${appPaths.runtimeStorageMode || "unknown"}.`
         : "Runtime diagnostics unavailable."
     )
   );
@@ -81,6 +98,10 @@ function createSystemReport(options) {
     warnings.push("A corrupt runtime-state file was archived and a clean state was rebuilt.");
   }
 
+  if (appPaths.runtimeStorageMode === "EXTERNAL_RUNTIME_DIR" && !runtimeBootstrapReport) {
+    warnings.push("External runtime storage is enabled but no bootstrap report was found yet.");
+  }
+
   if (gdprState.complianceReport && gdprState.complianceReport.status === "BLOCKED_FOR_DEPLOYMENT") {
     warnings.push("GDPR strict mode is blocking deployment until mandatory controls are documented.");
   }
@@ -100,6 +121,13 @@ function createSystemReport(options) {
     version: packageManifest.version || "unknown",
     status,
     readiness: status === "READY",
+    runtime: {
+      storageMode: appPaths.runtimeStorageMode || "unknown",
+      runtimeDir: appPaths.runtimeDir || null,
+      runtimeStatePath: runtimeDiagnostics ? runtimeDiagnostics.stateFilePath : null,
+      bootstrapReportPresent: Boolean(runtimeBootstrapReport),
+      bootstrapGeneratedAt: runtimeBootstrapReport ? runtimeBootstrapReport.generatedAt : null
+    },
     failures,
     warnings,
     checks

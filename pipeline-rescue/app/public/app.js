@@ -667,6 +667,7 @@ function renderComplianceReport(report) {
 }
 
 function renderSystemReport(report) {
+  const runtime = report.runtime || {};
   document.getElementById("system-report").innerHTML = `
     <div class="verification-grid">
       <article class="verification-metric">
@@ -677,6 +678,19 @@ function renderSystemReport(report) {
         <span class="score-label">Version</span>
         <span class="verification-value">${report.version}</span>
       </article>
+      <article class="verification-metric">
+        <span class="score-label">Runtime mode</span>
+        <span class="verification-value">${escapeHtml(runtime.storageMode || "unknown")}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Runtime</p>
+      <ul class="verification-list">
+        <li>Directory: ${escapeHtml(runtime.runtimeDir || "unavailable")}</li>
+        <li>State file: ${escapeHtml(runtime.runtimeStatePath || "unavailable")}</li>
+        <li>Bootstrap report: ${runtime.bootstrapReportPresent ? "present" : "missing"}</li>
+        <li>Bootstrap generated at: ${escapeHtml(runtime.bootstrapGeneratedAt || "not yet generated")}</li>
+      </ul>
     </div>
     <div class="verification-block">
       <p class="score-label">Warnings</p>

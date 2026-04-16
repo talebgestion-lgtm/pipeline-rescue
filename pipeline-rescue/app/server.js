@@ -375,6 +375,14 @@ function readHubSpotInstallState() {
   return normalizeInstallState(readJsonFile(appPaths.hubspotInstallStatePath));
 }
 
+function readRuntimeBootstrapReport() {
+  if (!fs.existsSync(appPaths.bootstrapReportPath)) {
+    return null;
+  }
+
+  return readJsonFile(appPaths.bootstrapReportPath);
+}
+
 function validateComplianceConfigPayload(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     const error = new Error("Compliance config body must be a JSON object.");
@@ -522,11 +530,14 @@ function buildSystemState(appState) {
   const aiPolicyState = getAiPolicyState();
   const aiProviderState = getAiProviderState();
   const hubspotState = getHubSpotState();
+  const runtimeBootstrapReport = readRuntimeBootstrapReport();
   const systemReport = createSystemReport({
     packageManifest: appState.packageManifest,
     fixtures: appState.fixtures,
     gdprState,
     hubspotState,
+    appPaths,
+    runtimeBootstrapReport,
     runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
     startupError: appState.startupError
   });
@@ -1359,6 +1370,8 @@ const server = http.createServer(async (request, response) => {
           fixtures: appState.fixtures,
           gdprState: refreshedState,
           hubspotState,
+          appPaths,
+          runtimeBootstrapReport: readRuntimeBootstrapReport(),
           runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
           startupError: appState.startupError
         })

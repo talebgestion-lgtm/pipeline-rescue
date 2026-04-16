@@ -162,6 +162,7 @@ The UI now supports:
 - a live HubSpot note write path to persist the follow-up draft on the CRM record
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
+- runtime diagnostics that expose the active storage mode, runtime directory, and bootstrap-report status
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots

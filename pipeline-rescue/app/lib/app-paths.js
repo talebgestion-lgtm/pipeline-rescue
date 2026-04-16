@@ -25,6 +25,7 @@ function resolveAppPaths(options = {}) {
     bundledDataDir,
     runtimeDir,
     runtimeLogsDir: path.join(runtimeDir, "logs"),
+    bootstrapReportPath: path.join(runtimeDir, "bootstrap-report.json"),
     runtimeStorageMode: path.resolve(runtimeDir) === path.resolve(bundledDataDir)
       ? "IN_PLACE"
       : "EXTERNAL_RUNTIME_DIR",
