@@ -6,6 +6,7 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const { buildSupportBundle } = require("./lib/support-bundle");
 const {
   buildLiveQueueScenario,
   createLiveQueueManagerDigest,
@@ -547,6 +548,7 @@ function buildSystemState(appState) {
     aiPolicyState,
     aiProviderState,
     hubspotState,
+    runtimeBootstrapReport,
     systemReport
   };
 }
@@ -1483,6 +1485,22 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/runtime/export") {
       sendJson(response, 200, appState.runtime.exportState());
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/runtime/support-bundle") {
+      const supportBundle = buildSupportBundle({
+        appPaths,
+        packageManifest: appState.packageManifest,
+        runtimeExport: appState.runtime ? appState.runtime.exportState() : null,
+        runtimeBootstrapReport,
+        systemReport,
+        gdprState,
+        aiPolicyState,
+        aiProviderState,
+        hubspotState
+      });
+      sendJson(response, 200, supportBundle);
       return;
     }
 

@@ -189,23 +189,37 @@ async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
 
-async function downloadFeedbackExport(format) {
-  const response = await fetch(buildScenarioUrl(`/api/feedback/export?format=${encodeURIComponent(format)}`));
+async function downloadBlobFromEndpoint(endpointUrl, filename) {
+  const response = await fetch(endpointUrl);
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status}`);
   }
 
   const blob = await response.blob();
-  const url = window.URL.createObjectURL(blob);
+  const objectUrl = window.URL.createObjectURL(blob);
   const link = document.createElement("a");
-  const extension = format === "csv" ? "csv" : "json";
-
-  link.href = url;
-  link.download = `pipeline-rescue-feedback-${appState.scenarioId}.${extension}`;
+  link.href = objectUrl;
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  window.URL.revokeObjectURL(url);
+  window.URL.revokeObjectURL(objectUrl);
+}
+
+async function downloadFeedbackExport(format) {
+  const extension = format === "csv" ? "csv" : "json";
+  await downloadBlobFromEndpoint(
+    buildScenarioUrl(`/api/feedback/export?format=${encodeURIComponent(format)}`),
+    `pipeline-rescue-feedback-${appState.scenarioId}.${extension}`
+  );
+}
+
+async function downloadSupportBundle() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await downloadBlobFromEndpoint(
+    "/api/runtime/support-bundle",
+    `pipeline-rescue-support-bundle-${timestamp}.json`
+  );
 }
 
 async function saveComplianceConfig(config) {
@@ -1702,6 +1716,10 @@ async function handleFeedbackExportClick(format) {
   await downloadFeedbackExport(format);
 }
 
+async function handleSupportBundleDownloadClick() {
+  await downloadSupportBundle();
+}
+
 async function refreshScenarioSummary() {
   const overview = await loadOverview(appState.scenarioId);
   appState.overview = overview;
@@ -2158,6 +2176,7 @@ async function main() {
   const select = document.getElementById("scenario-select");
   const refreshButton = document.getElementById("refresh-button");
   const resetButton = document.getElementById("reset-button");
+  const downloadSupportBundleButton = document.getElementById("download-support-bundle-button");
   const queueList = document.getElementById("queue-list");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
@@ -2219,6 +2238,7 @@ async function main() {
     });
 
     resetButton.addEventListener("click", handleResetClick);
+    downloadSupportBundleButton.addEventListener("click", handleSupportBundleDownloadClick);
 
     document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
     document.getElementById("task-button").addEventListener("click", handleTaskClick);

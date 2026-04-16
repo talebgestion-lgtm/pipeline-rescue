@@ -100,3 +100,4 @@ It now has:
 - runtime-first storage separation so portable or deployed instances can keep mutable state outside bundled app files
 - idempotent runtime bootstrap so portable packages seed their writable config area before the app starts
 - runtime observability in the system report so each instance exposes its active storage mode and bootstrap status
+- a support-bundle export path for pilot diagnostics, migration, and customer support without machine-by-machine inspection

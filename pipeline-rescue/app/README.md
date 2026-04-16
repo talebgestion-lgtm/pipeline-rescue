@@ -118,6 +118,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/compliance/report`
 - `/api/compliance/config`
 - `/api/system/report`
+- `/api/runtime/support-bundle`
 - `/health/live`
 - `/health/ready`
 
@@ -163,6 +164,7 @@ The UI now supports:
 - a strict GDPR deployment gate report
 - a system diagnostics panel with readiness status
 - runtime diagnostics that expose the active storage mode, runtime directory, and bootstrap-report status
+- a downloadable support bundle that captures runtime state, system diagnostics, configs, and sanitized HubSpot install metadata
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots
