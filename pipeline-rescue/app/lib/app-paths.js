@@ -49,7 +49,33 @@ function ensureRuntimeLayout(appPaths) {
   fs.mkdirSync(appPaths.runtimeLogsDir, { recursive: true });
 }
 
+function listRuntimeSeedFiles(appPaths) {
+  return [
+    {
+      label: "GDPR config",
+      sourcePath: appPaths.gdprConfigDefaultPath,
+      targetPath: appPaths.gdprConfigPath
+    },
+    {
+      label: "AI policy",
+      sourcePath: appPaths.aiPolicyDefaultPath,
+      targetPath: appPaths.aiPolicyPath
+    },
+    {
+      label: "AI provider config",
+      sourcePath: appPaths.aiProviderConfigDefaultPath,
+      targetPath: appPaths.aiProviderConfigPath
+    },
+    {
+      label: "HubSpot config",
+      sourcePath: appPaths.hubspotConfigDefaultPath,
+      targetPath: appPaths.hubspotConfigPath
+    }
+  ];
+}
+
 module.exports = {
   ensureRuntimeLayout,
+  listRuntimeSeedFiles,
   resolveAppPaths
 };

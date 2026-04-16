@@ -46,6 +46,12 @@ $env:PIPELINE_RESCUE_RUNTIME_DIR = "C:\PipelineRescueData"
 npm start
 ```
 
+Bootstrap that runtime directory explicitly when needed:
+
+```powershell
+npm run bootstrap:runtime
+```
+
 ## Scope
 
 It is intentionally:
@@ -168,6 +174,15 @@ The pilot runtime now persists local state in:
 - `data/runtime-state.json`
 
 If `PIPELINE_RESCUE_RUNTIME_DIR` is set, mutable files are written there instead of `app/data`.
+
+The bootstrap script seeds missing runtime files:
+
+- `gdpr-config.json`
+- `ai-policy.json`
+- `ai-provider-config.json`
+- `hubspot-config.json`
+- `hubspot-install-state.json`
+- `bootstrap-report.json`
 
 This file stores:
 

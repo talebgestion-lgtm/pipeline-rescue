@@ -45,7 +45,7 @@ function buildRelease(options = {}) {
   ensureDir(appDir);
   ensureDir(runtimeDir);
 
-  for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public"]) {
+  for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public", "scripts"]) {
     copyRecursive(path.join(appRoot, asset), path.join(appDir, asset), {
       exclude: new Set(["runtime-state.json", "release"])
     });
@@ -62,6 +62,12 @@ where node >nul 2>nul
 if errorlevel 1 (
   echo Node.js 20+ is required to run Pipeline Rescue.
   echo Download Node.js from https://nodejs.org/ and rerun this launcher.
+  pause
+  exit /b 1
+)
+node scripts\\bootstrap-runtime.js
+if errorlevel 1 (
+  echo Runtime bootstrap failed.
   pause
   exit /b 1
 )
