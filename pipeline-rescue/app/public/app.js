@@ -222,6 +222,14 @@ async function downloadSupportBundle() {
   );
 }
 
+async function restoreSupportBundle(payload) {
+  return fetchJson("/api/runtime/support-bundle/restore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
 async function saveComplianceConfig(config) {
   return fetchJson("/api/compliance/config", {
     method: "POST",
@@ -1720,6 +1728,59 @@ async function handleSupportBundleDownloadClick() {
   await downloadSupportBundle();
 }
 
+async function handleSupportBundleRestoreClick() {
+  const fileInput = document.getElementById("restore-support-bundle-input");
+  const selectedFile = fileInput.files && fileInput.files[0];
+
+  if (!selectedFile) {
+    throw new Error("Select a support bundle JSON file before restoring.");
+  }
+
+  const raw = await selectedFile.text();
+  const payload = JSON.parse(raw);
+  const response = await restoreSupportBundle(payload);
+  renderSupportBundleStatus(response);
+  fileInput.value = "";
+  await renderScenario(appState.catalog, appState.scenarioId);
+}
+
+function renderSupportBundleError(error) {
+  const container = document.getElementById("support-bundle-status");
+  container.innerHTML = `
+    <p class="verification-note">Support bundle restore failed: ${escapeHtml(error.message)}</p>
+  `;
+}
+
+function renderSupportBundleStatus(payload) {
+  const container = document.getElementById("support-bundle-status");
+  if (!payload) {
+    container.innerHTML = `
+      <p class="verification-note">No support restore has been run in this session.</p>
+    `;
+    return;
+  }
+
+  const restoredSections = payload.restoreReport?.restoredSections || {};
+  container.innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">Support restore</p>
+      <p class="verification-note">Backup dir: ${escapeHtml(payload.restoreReport?.backupDir || "unavailable")}</p>
+      <p class="verification-note">Restore report: ${escapeHtml(payload.restoreReport?.reportPath || "unavailable")}</p>
+      <ul class="verification-list">
+        <li>Runtime state: ${restoredSections.runtimeState ? "restored" : "skipped"}</li>
+        <li>GDPR config: ${restoredSections.gdprConfig ? "restored" : "skipped"}</li>
+        <li>AI policy: ${restoredSections.aiPolicy ? "restored" : "skipped"}</li>
+        <li>AI provider config: ${restoredSections.aiProviderConfig ? "restored" : "skipped"}</li>
+        <li>HubSpot config: ${restoredSections.hubspotConfig ? "restored" : "skipped"}</li>
+        <li>HubSpot install state: intentionally skipped</li>
+      </ul>
+      <ul class="verification-list">
+        ${(payload.restoreReport?.notes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
 async function refreshScenarioSummary() {
   const overview = await loadOverview(appState.scenarioId);
   appState.overview = overview;
@@ -2177,6 +2238,7 @@ async function main() {
   const refreshButton = document.getElementById("refresh-button");
   const resetButton = document.getElementById("reset-button");
   const downloadSupportBundleButton = document.getElementById("download-support-bundle-button");
+  const restoreSupportBundleButton = document.getElementById("restore-support-bundle-button");
   const queueList = document.getElementById("queue-list");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
@@ -2227,6 +2289,7 @@ async function main() {
     await registerInstallShell();
 
     const catalog = await loadScenarios();
+    renderSupportBundleStatus(null);
     const initialScenario = getSearchScenario() || catalog.defaultScenario;
 
     select.addEventListener("change", async (event) => {
@@ -2239,6 +2302,13 @@ async function main() {
 
     resetButton.addEventListener("click", handleResetClick);
     downloadSupportBundleButton.addEventListener("click", handleSupportBundleDownloadClick);
+    restoreSupportBundleButton.addEventListener("click", async () => {
+      try {
+        await handleSupportBundleRestoreClick();
+      } catch (error) {
+        renderSupportBundleError(error);
+      }
+    });
 
     document.getElementById("analyze-button").addEventListener("click", handleAnalyzeClick);
     document.getElementById("task-button").addEventListener("click", handleTaskClick);

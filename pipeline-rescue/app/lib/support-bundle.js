@@ -61,6 +61,39 @@ function buildSupportBundle(options = {}) {
   };
 }
 
+function validateSupportBundlePayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    const error = new Error("Support bundle body must be a JSON object.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (payload.bundleVersion !== 1) {
+    const error = new Error("Unsupported support bundle version.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!payload.runtime || typeof payload.runtime !== "object" || Array.isArray(payload.runtime)) {
+    const error = new Error("Support bundle runtime section is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (
+    !payload.runtime.exportState
+    || typeof payload.runtime.exportState !== "object"
+    || Array.isArray(payload.runtime.exportState)
+  ) {
+    const error = new Error("Support bundle runtime export state is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return payload;
+}
+
 module.exports = {
-  buildSupportBundle
+  buildSupportBundle,
+  validateSupportBundlePayload
 };

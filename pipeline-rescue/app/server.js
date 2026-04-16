@@ -6,7 +6,7 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
-const { buildSupportBundle } = require("./lib/support-bundle");
+const { buildSupportBundle, validateSupportBundlePayload } = require("./lib/support-bundle");
 const {
   buildLiveQueueScenario,
   createLiveQueueManagerDigest,
@@ -57,6 +57,57 @@ function saveJsonAtomic(filePath, payload) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(tempFilePath, JSON.stringify(payload, null, 2));
   fs.renameSync(tempFilePath, filePath);
+}
+
+function copyFileIfExists(sourcePath, targetPath) {
+  if (!fs.existsSync(sourcePath)) {
+    return false;
+  }
+
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.copyFileSync(sourcePath, targetPath);
+  return true;
+}
+
+function createTimestampToken() {
+  return new Date().toISOString().replace(/[:.]/g, "-");
+}
+
+function createRuntimeBackup() {
+  const backupToken = createTimestampToken();
+  const backupDir = path.join(appPaths.runtimeBackupsDir, `support-restore-${backupToken}`);
+  const files = [
+    { label: "GDPR config", path: appPaths.gdprConfigPath },
+    { label: "AI policy", path: appPaths.aiPolicyPath },
+    { label: "AI provider config", path: appPaths.aiProviderConfigPath },
+    { label: "HubSpot config", path: appPaths.hubspotConfigPath },
+    { label: "HubSpot install state", path: appPaths.hubspotInstallStatePath },
+    { label: "Runtime state", path: appPaths.runtimeStatePath },
+    { label: "Bootstrap report", path: appPaths.bootstrapReportPath }
+  ];
+
+  const backedUpFiles = files
+    .map((entry) => ({
+      label: entry.label,
+      path: entry.path,
+      backedUp: copyFileIfExists(entry.path, path.join(backupDir, path.basename(entry.path)))
+    }))
+    .filter((entry) => entry.backedUp)
+    .map((entry) => ({
+      label: entry.label,
+      path: entry.path
+    }));
+
+  return {
+    backupDir,
+    backedUpFiles
+  };
+}
+
+function writeSupportRestoreReport(report) {
+  const reportPath = path.join(appPaths.runtimeLogsDir, `support-restore-${createTimestampToken()}.json`);
+  saveJsonAtomic(reportPath, report);
+  return reportPath;
 }
 
 function readJsonFile(filePath) {
@@ -584,7 +635,14 @@ const server = http.createServer(async (request, response) => {
   try {
     const host = request.headers.host || `localhost:${port}`;
     const url = new URL(request.url, `http://${host}`);
-    const { gdprState, aiPolicyState, aiProviderState, hubspotState, systemReport } = buildSystemState(appState);
+    const {
+      gdprState,
+      aiPolicyState,
+      aiProviderState,
+      hubspotState,
+      runtimeBootstrapReport,
+      systemReport
+    } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
       || (appState.fixtures ? appState.fixtures.defaultScenario : null);
 
@@ -1501,6 +1559,68 @@ const server = http.createServer(async (request, response) => {
         hubspotState
       });
       sendJson(response, 200, supportBundle);
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/runtime/support-bundle/restore") {
+      const bundle = validateSupportBundlePayload(await readJsonBody(request));
+
+      const nextGdprConfig = bundle.compliance && bundle.compliance.config
+        ? validateComplianceConfigPayload(bundle.compliance.config)
+        : null;
+      const nextAiPolicy = bundle.ai && bundle.ai.policy
+        ? validateAiPolicyPayload(bundle.ai.policy)
+        : null;
+      const nextAiProviderConfig = bundle.ai && bundle.ai.providerConfig
+        ? validateAiProviderConfigPayload(bundle.ai.providerConfig)
+        : null;
+      const nextHubSpotConfig = bundle.hubspot && bundle.hubspot.config
+        ? validateHubSpotConfigPayload(bundle.hubspot.config)
+        : null;
+
+      const backup = createRuntimeBackup();
+      const runtimeState = appState.runtime.restoreState(bundle.runtime.exportState);
+
+      if (nextGdprConfig) {
+        saveJsonAtomic(appPaths.gdprConfigPath, nextGdprConfig);
+      }
+      if (nextAiPolicy) {
+        saveJsonAtomic(appPaths.aiPolicyPath, nextAiPolicy);
+      }
+      if (nextAiProviderConfig) {
+        saveJsonAtomic(appPaths.aiProviderConfigPath, nextAiProviderConfig);
+      }
+      if (nextHubSpotConfig) {
+        saveJsonAtomic(appPaths.hubspotConfigPath, nextHubSpotConfig);
+      }
+
+      const nextSystemState = buildSystemState(appState);
+      const restoreReport = {
+        restoredAt: new Date().toISOString(),
+        backupDir: backup.backupDir,
+        backedUpFiles: backup.backedUpFiles,
+        restoredSections: {
+          runtimeState: true,
+          gdprConfig: Boolean(nextGdprConfig),
+          aiPolicy: Boolean(nextAiPolicy),
+          aiProviderConfig: Boolean(nextAiProviderConfig),
+          hubspotConfig: Boolean(nextHubSpotConfig),
+          hubspotInstallState: false
+        },
+        notes: [
+          "HubSpot install state is intentionally not restored from the support bundle because access and refresh tokens are excluded."
+        ]
+      };
+      const restoreReportPath = writeSupportRestoreReport(restoreReport);
+
+      sendJson(response, 200, {
+        restoreReport: {
+          ...restoreReport,
+          reportPath: restoreReportPath
+        },
+        runtimeState,
+        systemReport: nextSystemState.systemReport
+      });
       return;
     }
 

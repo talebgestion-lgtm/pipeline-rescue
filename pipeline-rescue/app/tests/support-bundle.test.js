@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupportBundle } = require("../lib/support-bundle");
+const { buildSupportBundle, validateSupportBundlePayload } = require("../lib/support-bundle");
 
 test("buildSupportBundle includes runtime, system, and sanitized HubSpot state", () => {
   const bundle = buildSupportBundle({
@@ -65,4 +65,16 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
   assert.equal(bundle.hubspot.installState.installs[0].portalId, "123456");
   assert.equal("accessToken" in bundle.hubspot.installState.installs[0], false);
   assert.equal("refreshToken" in bundle.hubspot.installState.installs[0], false);
+});
+
+test("validateSupportBundlePayload rejects incomplete bundle bodies", () => {
+  assert.throws(
+    () => validateSupportBundlePayload({ bundleVersion: 1 }),
+    /runtime section is required/
+  );
+
+  assert.throws(
+    () => validateSupportBundlePayload({ bundleVersion: 2, runtime: { exportState: {} } }),
+    /Unsupported support bundle version/
+  );
 });

@@ -163,6 +163,20 @@ function fromSerializableState(state) {
   };
 }
 
+function validateImportedRuntimeState(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    throw createValidationError("Runtime state import must be a JSON object.");
+  }
+
+  if (payload.scenarios != null && (typeof payload.scenarios !== "object" || Array.isArray(payload.scenarios))) {
+    throw createValidationError("Runtime state import scenarios must be an object.");
+  }
+
+  return {
+    scenarios: payload.scenarios || {}
+  };
+}
+
 function createRuntime(fixtures, options = {}) {
   const stateFilePath = options.stateFilePath || path.join(__dirname, "..", "data", "runtime-state.json");
   const scenarioState = new Map();
@@ -170,7 +184,8 @@ function createRuntime(fixtures, options = {}) {
     stateLoadRecovered: false,
     archivedCorruptStatePath: null,
     lastPersistAt: null,
-    lastPersistSucceeded: true
+    lastPersistSucceeded: true,
+    lastRestoreAt: null
   };
 
   function writeJsonAtomic(filePath, payload) {
@@ -857,6 +872,21 @@ function createRuntime(fixtures, options = {}) {
     return getOverview(scenarioId);
   }
 
+  function restoreState(payload) {
+    const normalizedPayload = validateImportedRuntimeState(payload);
+    scenarioState.clear();
+
+    for (const [scenarioId, state] of Object.entries(normalizedPayload.scenarios)) {
+      scenarioState.set(scenarioId, fromSerializableState(state));
+    }
+
+    runtimeDiagnostics.lastPersistSucceeded = true;
+    runtimeDiagnostics.lastRestoreAt = new Date().toISOString();
+    persistState();
+
+    return exportState();
+  }
+
   function getRuntimeDiagnostics() {
     return {
       ...runtimeDiagnostics,
@@ -879,6 +909,7 @@ function createRuntime(fixtures, options = {}) {
     recordFeedback,
     getEvents,
     exportState,
+    restoreState,
     resetScenario
   };
 }

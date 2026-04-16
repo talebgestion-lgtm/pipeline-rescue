@@ -102,6 +102,39 @@ test("runtime recovers from a corrupt persisted state file", () => {
   assert.equal(overview.focusedDeal.taskState.status, "NOT_CREATED");
 });
 
+test("restoreState replaces persisted runtime state from an imported payload", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+
+  const runtime = createRuntime(fixtures, { stateFilePath });
+  runtime.createTask("critical-stalled", "DL-1001");
+
+  const restored = runtime.restoreState({
+    scenarios: {
+      "draft-blocked": {
+        sequence: 3,
+        taskStates: {
+          "DL-2001": {
+            status: "CREATED",
+            taskId: "task_1"
+          }
+        },
+        feedbackStates: {},
+        feedbackHistory: [],
+        events: []
+      }
+    }
+  });
+
+  assert.equal(restored.runtimeDiagnostics.scenarioCount, 1);
+  assert.match(restored.runtimeDiagnostics.lastRestoreAt, /^20\d{2}-/);
+  assert.equal(runtime.getOverview("critical-stalled").focusedDeal.taskState.status, "NOT_CREATED");
+  assert.equal(runtime.getOverview("draft-blocked").focusedDeal.taskState.status, "CREATED");
+
+  const reloaded = createRuntime(fixtures, { stateFilePath });
+  assert.equal(reloaded.getOverview("draft-blocked").focusedDeal.taskState.status, "CREATED");
+});
+
 test("recordFeedback persists recommendation feedback and decorates overview", () => {
   const runtime = createTestRuntime();
   const payload = runtime.recordFeedback("critical-stalled", "DL-1001", "USEFUL", {
