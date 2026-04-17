@@ -20,6 +20,9 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
     },
     runtimeExport: {
       stateFilePath: "C:\\PipelineRescueData\\runtime-state.json",
+      stateStorageFormat: "SCENARIO_SHARDS_V1",
+      scenarioStoreDir: "C:\\PipelineRescueData\\scenario-state",
+      scenarioShardCount: 1,
       scenarios: {
         "critical-stalled": {}
       }
@@ -61,6 +64,9 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
   assert.equal(bundle.product.version, "0.24.0");
   assert.equal(bundle.runtime.storageMode, "EXTERNAL_RUNTIME_DIR");
   assert.equal(bundle.runtime.exportState.stateFilePath, "C:\\PipelineRescueData\\runtime-state.json");
+  assert.equal(bundle.runtime.runtimeStateFormat, "SCENARIO_SHARDS_V1");
+  assert.equal(bundle.runtime.runtimeScenarioStoreDir, "C:\\PipelineRescueData\\scenario-state");
+  assert.equal(bundle.runtime.runtimeScenarioShardCount, 1);
   assert.equal(bundle.hubspot.installState.installCount, 1);
   assert.equal(bundle.hubspot.installState.installs[0].portalId, "123456");
   assert.equal("accessToken" in bundle.hubspot.installState.installs[0], false);

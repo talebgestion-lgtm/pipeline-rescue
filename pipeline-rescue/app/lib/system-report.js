@@ -92,7 +92,7 @@ function createSystemReport(options) {
       "Runtime state storage",
       runtimeDiagnostics && runtimeDiagnostics.lastPersistSucceeded !== false ? "PASS" : "FAIL",
       runtimeDiagnostics
-        ? `State file ${runtimeDiagnostics.stateFilePath}. Recovered corrupt state: ${Boolean(runtimeDiagnostics.stateLoadRecovered)}. Storage mode: ${appPaths.runtimeStorageMode || "unknown"}.`
+        ? `State index ${runtimeDiagnostics.stateIndexPath || runtimeDiagnostics.stateFilePath}. Format ${runtimeDiagnostics.stateStorageFormat || "unknown"} with ${runtimeDiagnostics.scenarioShardCount || 0} scenario shard(s). Recovered corrupt state: ${Boolean(runtimeDiagnostics.stateLoadRecovered)}.`
         : "Runtime diagnostics unavailable."
     )
   );
@@ -149,6 +149,14 @@ function createSystemReport(options) {
     warnings.push(`A corrupt runtime journal was archived to ${runtimeDiagnostics.archivedCorruptJournalPath}.`);
   }
 
+  if (runtimeDiagnostics && Array.isArray(runtimeDiagnostics.archivedCorruptScenarioShardPaths) && runtimeDiagnostics.archivedCorruptScenarioShardPaths.length > 0) {
+    warnings.push(`One or more corrupt scenario shards were archived (${runtimeDiagnostics.archivedCorruptScenarioShardPaths.length}).`);
+  }
+
+  if (runtimeDiagnostics && runtimeDiagnostics.legacyStateMigrated) {
+    warnings.push("A legacy runtime-state snapshot was migrated into structured scenario shards.");
+  }
+
   if (appPaths.runtimeStorageMode === "EXTERNAL_RUNTIME_DIR" && !runtimeBootstrapReport) {
     warnings.push("External runtime storage is enabled but no bootstrap report was found yet.");
   }
@@ -184,6 +192,10 @@ function createSystemReport(options) {
       storageMode: appPaths.runtimeStorageMode || "unknown",
       runtimeDir: appPaths.runtimeDir || null,
       runtimeStatePath: runtimeDiagnostics ? runtimeDiagnostics.stateFilePath : null,
+      runtimeStateIndexPath: runtimeDiagnostics ? (runtimeDiagnostics.stateIndexPath || runtimeDiagnostics.stateFilePath) : null,
+      runtimeStateFormat: runtimeDiagnostics ? (runtimeDiagnostics.stateStorageFormat || "unknown") : "unknown",
+      runtimeScenarioStoreDir: runtimeDiagnostics ? runtimeDiagnostics.scenarioStoreDir || null : null,
+      runtimeScenarioShardCount: runtimeDiagnostics ? runtimeDiagnostics.scenarioShardCount || 0 : 0,
       runtimeJournalPath: runtimeDiagnostics ? runtimeDiagnostics.journalFilePath : (appPaths.runtimeJournalPath || null),
       runtimeJournalEntriesLoaded: runtimeDiagnostics ? runtimeDiagnostics.journalEntriesLoaded || 0 : 0,
       runtimeJournalReplayUsed: runtimeDiagnostics ? Boolean(runtimeDiagnostics.journalReplayUsed) : false,

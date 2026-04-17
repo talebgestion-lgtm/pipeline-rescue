@@ -27,6 +27,7 @@ function resolveAppPaths(options = {}) {
     runtimeBackupsDir: path.join(runtimeDir, "backups"),
     runtimeSnapshotsDir: path.join(runtimeDir, "snapshots"),
     runtimeLogsDir: path.join(runtimeDir, "logs"),
+    runtimeScenarioStateDir: path.join(runtimeDir, "scenario-state"),
     runtimeLockPath: path.join(runtimeDir, "runtime.lock.json"),
     runtimeJournalPath: path.join(runtimeDir, "runtime-journal.jsonl"),
     bootstrapReportPath: path.join(runtimeDir, "bootstrap-report.json"),
@@ -54,6 +55,7 @@ function ensureRuntimeLayout(appPaths) {
   fs.mkdirSync(appPaths.runtimeBackupsDir, { recursive: true });
   fs.mkdirSync(appPaths.runtimeSnapshotsDir, { recursive: true });
   fs.mkdirSync(appPaths.runtimeLogsDir, { recursive: true });
+  fs.mkdirSync(appPaths.runtimeScenarioStateDir, { recursive: true });
 }
 
 function listRuntimeSeedFiles(appPaths) {

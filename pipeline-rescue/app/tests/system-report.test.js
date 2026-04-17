@@ -33,6 +33,12 @@ test("system report is degraded when GDPR blocks deployment", () => {
     },
     runtimeDiagnostics: {
       stateFilePath: "runtime-state.json",
+      stateIndexPath: "runtime-state.json",
+      stateStorageFormat: "SCENARIO_SHARDS_V1",
+      scenarioStoreDir: "scenario-state",
+      scenarioShardCount: 0,
+      archivedCorruptScenarioShardPaths: [],
+      legacyStateMigrated: false,
       journalFilePath: "runtime-journal.jsonl",
       journalEntriesLoaded: 0,
       journalReplayUsed: false,
@@ -110,6 +116,12 @@ test("system report warns when external runtime storage has no bootstrap report"
     runtimeBootstrapReport: null,
     runtimeDiagnostics: {
       stateFilePath: "C:\\PipelineRescueData\\runtime-state.json",
+      stateIndexPath: "C:\\PipelineRescueData\\runtime-state.json",
+      stateStorageFormat: "SCENARIO_SHARDS_V1",
+      scenarioStoreDir: "C:\\PipelineRescueData\\scenario-state",
+      scenarioShardCount: 0,
+      archivedCorruptScenarioShardPaths: [],
+      legacyStateMigrated: false,
       journalFilePath: "C:\\PipelineRescueData\\runtime-journal.jsonl",
       journalEntriesLoaded: 0,
       journalReplayUsed: false,
@@ -177,6 +189,12 @@ test("system report exposes runtime snapshot summary", () => {
     },
     runtimeDiagnostics: {
       stateFilePath: "C:\\PipelineRescue\\data\\runtime-state.json",
+      stateIndexPath: "C:\\PipelineRescue\\data\\runtime-state.json",
+      stateStorageFormat: "SCENARIO_SHARDS_V1",
+      scenarioStoreDir: "C:\\PipelineRescue\\data\\scenario-state",
+      scenarioShardCount: 1,
+      archivedCorruptScenarioShardPaths: [],
+      legacyStateMigrated: false,
       journalFilePath: "C:\\PipelineRescue\\data\\runtime-journal.jsonl",
       journalEntriesLoaded: 4,
       journalReplayUsed: true,
@@ -189,6 +207,10 @@ test("system report exposes runtime snapshot summary", () => {
   assert.equal(report.runtime.snapshotCount, 1);
   assert.equal(report.runtime.latestSnapshotId, "snapshot-2026-04-16T20-00-00-000Z");
   assert.equal(report.runtime.latestSnapshotAt, "2026-04-16T20:00:00.000Z");
+  assert.equal(report.runtime.runtimeStateIndexPath, "C:\\PipelineRescue\\data\\runtime-state.json");
+  assert.equal(report.runtime.runtimeStateFormat, "SCENARIO_SHARDS_V1");
+  assert.equal(report.runtime.runtimeScenarioStoreDir, "C:\\PipelineRescue\\data\\scenario-state");
+  assert.equal(report.runtime.runtimeScenarioShardCount, 1);
   assert.equal(report.runtime.runtimeJournalPath, "C:\\PipelineRescue\\data\\runtime-journal.jsonl");
   assert.equal(report.runtime.runtimeJournalEntriesLoaded, 4);
   assert.equal(report.runtime.runtimeJournalReplayUsed, true);

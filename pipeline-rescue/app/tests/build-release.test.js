@@ -22,6 +22,8 @@ test("buildRelease creates a portable package without runtime state", () => {
     assert.equal(fs.existsSync(path.join(result.outputDir, "README.txt")), true);
     assert.equal(fs.existsSync(result.runtimeDir), true);
     assert.equal(fs.existsSync(path.join(result.appDir, "data", "runtime-state.json")), false);
+    assert.equal(fs.existsSync(path.join(result.appDir, "data", "scenario-state")), false);
+    assert.equal(fs.existsSync(path.join(result.appDir, "data", "runtime-journal.jsonl")), false);
     assert.match(fs.readFileSync(result.launcherPath, "utf8"), /PIPELINE_RESCUE_RUNTIME_DIR=%~dp0runtime/);
     assert.match(fs.readFileSync(result.launcherPath, "utf8"), /node scripts\\bootstrap-runtime\.js/);
   } finally {

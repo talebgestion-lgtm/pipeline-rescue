@@ -5,6 +5,12 @@ const {
   buildOverview,
   buildDealAnalysis
 } = require("./analysis-engine");
+const {
+  STRUCTURED_RUNTIME_STORAGE_FORMAT,
+  isStructuredRuntimeManifest,
+  loadStructuredRuntimeState,
+  persistStructuredRuntimeState
+} = require("./runtime-state-store");
 
 const ALLOWED_OPERATOR_REASON_CODES = new Set([
   "ACCURATE_PRIORITY",
@@ -187,26 +193,26 @@ function validateImportedRuntimeState(payload) {
 function createRuntime(fixtures, options = {}) {
   const stateFilePath = options.stateFilePath || path.join(__dirname, "..", "data", "runtime-state.json");
   const journalFilePath = options.journalFilePath || path.join(path.dirname(stateFilePath), "runtime-journal.jsonl");
+  const scenarioStoreDir = options.scenarioStoreDir || path.join(path.dirname(stateFilePath), "scenario-state");
   const scenarioState = new Map();
   const runtimeDiagnostics = {
     stateLoadRecovered: false,
     archivedCorruptStatePath: null,
+    archivedCorruptScenarioShardPaths: [],
     journalLoadRecovered: false,
     archivedCorruptJournalPath: null,
     journalReplayUsed: false,
     journalEntriesLoaded: 0,
+    stateStorageFormat: STRUCTURED_RUNTIME_STORAGE_FORMAT,
+    stateIndexPath: stateFilePath,
+    scenarioStoreDir,
+    scenarioShardCount: 0,
+    legacyStateMigrated: false,
     lastPersistAt: null,
     lastPersistSucceeded: true,
     lastRestoreAt: null,
     lastJournalAppendAt: null
   };
-
-  function writeJsonAtomic(filePath, payload) {
-    const tempFilePath = `${filePath}.tmp`;
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(tempFilePath, payload);
-    fs.renameSync(tempFilePath, filePath);
-  }
 
   function buildSerializableScenarios() {
     return Object.fromEntries(
@@ -292,6 +298,42 @@ function createRuntime(fixtures, options = {}) {
     for (const [scenarioId, state] of Object.entries(scenarios)) {
       scenarioState.set(scenarioId, fromSerializableState(state));
     }
+
+    runtimeDiagnostics.scenarioShardCount = Object.keys(scenarios).length;
+  }
+
+  function archiveCorruptRuntimeFiles(corruptFiles = []) {
+    const archivedPaths = [];
+
+    for (const entry of corruptFiles) {
+      if (!entry || !entry.filePath || !fs.existsSync(entry.filePath)) {
+        continue;
+      }
+
+      const content = entry.content != null
+        ? entry.content
+        : fs.readFileSync(entry.filePath, "utf8");
+      const archivedPath = archiveCorruptFile(entry.filePath, content);
+
+      archivedPaths.push({
+        sourcePath: entry.filePath,
+        archivedPath
+      });
+    }
+
+    return archivedPaths;
+  }
+
+  function writeStructuredStateSnapshot(payload) {
+    const result = persistStructuredRuntimeState({
+      stateFilePath,
+      scenarioStoreDir,
+      payload
+    });
+
+    runtimeDiagnostics.stateStorageFormat = result.manifest.storageFormat;
+    runtimeDiagnostics.scenarioShardCount = result.scenarioShardCount;
+    runtimeDiagnostics.lastPersistAt = payload.persistedAt || runtimeDiagnostics.lastPersistAt;
   }
 
   function persistState() {
@@ -300,7 +342,7 @@ function createRuntime(fixtures, options = {}) {
 
     try {
       appendJournalEntry(payload);
-      writeJsonAtomic(stateFilePath, JSON.stringify(payload, null, 2));
+      writeStructuredStateSnapshot(payload);
       runtimeDiagnostics.lastPersistSucceeded = true;
       runtimeDiagnostics.lastPersistAt = persistedAt;
     } catch (error) {
@@ -311,36 +353,89 @@ function createRuntime(fixtures, options = {}) {
 
   function loadState() {
     let statePayload = null;
+    let structuredStatePayload = null;
+    let structuredStateLoadFailed = false;
 
     if (fs.existsSync(stateFilePath)) {
       try {
         statePayload = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+
+        if (isStructuredRuntimeManifest(statePayload)) {
+          const structuredResult = loadStructuredRuntimeState({
+            stateFilePath,
+            scenarioStoreDir,
+            manifestPayload: statePayload
+          });
+
+          structuredStatePayload = structuredResult.payload;
+          runtimeDiagnostics.stateStorageFormat = structuredResult.storageFormat;
+          runtimeDiagnostics.scenarioShardCount = structuredResult.scenarioShardCount;
+        }
       } catch (error) {
         runtimeDiagnostics.stateLoadRecovered = true;
-        runtimeDiagnostics.archivedCorruptStatePath = archiveCorruptFile(
-          stateFilePath,
-          fs.readFileSync(stateFilePath, "utf8")
-        );
+        structuredStateLoadFailed = structuredStateLoadFailed || error.corruptFiles?.length > 0;
+
+        if (error.corruptFiles?.length > 0) {
+          const archivedPaths = archiveCorruptRuntimeFiles(error.corruptFiles);
+          const archivedStateEntry = archivedPaths.find((entry) => entry.sourcePath === stateFilePath);
+          const archivedShardPaths = archivedPaths
+            .filter((entry) => entry.sourcePath !== stateFilePath)
+            .map((entry) => entry.archivedPath);
+
+          runtimeDiagnostics.archivedCorruptStatePath = archivedStateEntry
+            ? archivedStateEntry.archivedPath
+            : runtimeDiagnostics.archivedCorruptStatePath;
+          runtimeDiagnostics.archivedCorruptScenarioShardPaths.push(...archivedShardPaths);
+        } else {
+          runtimeDiagnostics.archivedCorruptStatePath = archiveCorruptFile(
+            stateFilePath,
+            fs.readFileSync(stateFilePath, "utf8")
+          );
+        }
+
+        statePayload = null;
+        structuredStatePayload = null;
       }
     }
 
     const latestJournalEntry = loadLatestJournalEntry();
+    const latestPersistedAt = structuredStatePayload
+      ? structuredStatePayload.persistedAt
+      : statePayload
+        ? statePayload.persistedAt
+        : null;
     const shouldUseJournal = Boolean(latestJournalEntry) && (
-      !statePayload
-      || parseIsoTimestamp(latestJournalEntry.recordedAt) > parseIsoTimestamp(statePayload.persistedAt)
+      structuredStateLoadFailed
+      || (!structuredStatePayload && !statePayload)
+      || parseIsoTimestamp(latestJournalEntry.recordedAt) > parseIsoTimestamp(latestPersistedAt)
     );
 
     if (shouldUseJournal) {
       runtimeDiagnostics.stateLoadRecovered = !statePayload || runtimeDiagnostics.stateLoadRecovered;
       runtimeDiagnostics.journalReplayUsed = true;
-      loadScenarioStateFromPayload({
+      const journalPayload = {
+        persistedAt: latestJournalEntry.recordedAt || new Date().toISOString(),
         scenarios: latestJournalEntry.scenarios || {}
-      });
+      };
+
+      loadScenarioStateFromPayload(journalPayload);
+      writeStructuredStateSnapshot(journalPayload);
+      return;
+    }
+
+    if (structuredStatePayload) {
+      loadScenarioStateFromPayload(structuredStatePayload);
       return;
     }
 
     if (statePayload) {
       loadScenarioStateFromPayload(statePayload);
+      runtimeDiagnostics.stateStorageFormat = STRUCTURED_RUNTIME_STORAGE_FORMAT;
+      runtimeDiagnostics.legacyStateMigrated = true;
+      writeStructuredStateSnapshot({
+        persistedAt: statePayload.persistedAt || new Date().toISOString(),
+        scenarios: statePayload.scenarios || {}
+      });
     }
   }
 
@@ -958,7 +1053,11 @@ function createRuntime(fixtures, options = {}) {
   function exportState() {
     return {
       stateFilePath,
+      stateIndexPath: stateFilePath,
       journalFilePath,
+      scenarioStoreDir,
+      stateStorageFormat: runtimeDiagnostics.stateStorageFormat,
+      scenarioShardCount: runtimeDiagnostics.scenarioShardCount,
       runtimeDiagnostics: {
         ...runtimeDiagnostics,
         scenarioCount: scenarioState.size
@@ -993,7 +1092,9 @@ function createRuntime(fixtures, options = {}) {
     return {
       ...runtimeDiagnostics,
       stateFilePath,
+      stateIndexPath: stateFilePath,
       journalFilePath,
+      scenarioStoreDir,
       scenarioCount: scenarioState.size
     };
   }

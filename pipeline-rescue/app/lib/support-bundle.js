@@ -35,6 +35,10 @@ function buildSupportBundle(options = {}) {
       storageMode: appPaths.runtimeStorageMode || "unknown",
       runtimeDir: appPaths.runtimeDir || null,
       runtimeStatePath: runtimeExport ? runtimeExport.stateFilePath : null,
+      runtimeStateIndexPath: runtimeExport ? (runtimeExport.stateIndexPath || runtimeExport.stateFilePath) : null,
+      runtimeStateFormat: runtimeExport ? runtimeExport.stateStorageFormat || "unknown" : "unknown",
+      runtimeScenarioStoreDir: runtimeExport ? runtimeExport.scenarioStoreDir || null : null,
+      runtimeScenarioShardCount: runtimeExport ? runtimeExport.scenarioShardCount || 0 : 0,
       bootstrapReportPath: appPaths.bootstrapReportPath || null,
       bootstrapReport: runtimeBootstrapReport,
       exportState: runtimeExport

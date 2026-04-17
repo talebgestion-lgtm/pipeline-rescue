@@ -184,6 +184,7 @@ The UI now supports:
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt
+- structured per-scenario runtime shards behind the state index for safer persistence and recovery
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots
@@ -194,6 +195,8 @@ The UI now supports:
 The pilot runtime now persists local state in:
 
 - `data/runtime-state.json`
+- `data/scenario-state/*.json`
+- `data/runtime-journal.jsonl`
 
 If `PIPELINE_RESCUE_RUNTIME_DIR` is set, mutable files are written there instead of `app/data`.
 
@@ -206,7 +209,7 @@ The bootstrap script seeds missing runtime files:
 - `hubspot-install-state.json`
 - `bootstrap-report.json`
 
-This file stores:
+The state index and scenario shards store:
 
 - created task state
 - feedback status and feedback history

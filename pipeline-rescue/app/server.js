@@ -71,12 +71,19 @@ function saveJsonAtomic(filePath, payload) {
   fs.renameSync(tempFilePath, filePath);
 }
 
-function copyFileIfExists(sourcePath, targetPath) {
+function copyPathIfExists(sourcePath, targetPath) {
   if (!fs.existsSync(sourcePath)) {
     return false;
   }
 
+  const sourceStat = fs.statSync(sourcePath);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+
+  if (sourceStat.isDirectory()) {
+    fs.cpSync(sourcePath, targetPath, { recursive: true });
+    return true;
+  }
+
   fs.copyFileSync(sourcePath, targetPath);
   return true;
 }
@@ -94,7 +101,9 @@ function createRuntimeBackup() {
     { label: "AI provider config", path: appPaths.aiProviderConfigPath },
     { label: "HubSpot config", path: appPaths.hubspotConfigPath },
     { label: "HubSpot install state", path: appPaths.hubspotInstallStatePath },
-    { label: "Runtime state", path: appPaths.runtimeStatePath },
+    { label: "Runtime state index", path: appPaths.runtimeStatePath },
+    { label: "Runtime scenario shards", path: appPaths.runtimeScenarioStateDir },
+    { label: "Runtime journal", path: appPaths.runtimeJournalPath },
     { label: "Bootstrap report", path: appPaths.bootstrapReportPath }
   ];
 
@@ -102,7 +111,7 @@ function createRuntimeBackup() {
     .map((entry) => ({
       label: entry.label,
       path: entry.path,
-      backedUp: copyFileIfExists(entry.path, path.join(backupDir, path.basename(entry.path)))
+      backedUp: copyPathIfExists(entry.path, path.join(backupDir, path.basename(entry.path)))
     }))
     .filter((entry) => entry.backedUp)
     .map((entry) => ({
@@ -499,7 +508,9 @@ function bootstrapApplication() {
     runtimeLock = acquireRuntimeLock(appPaths);
     const fixtures = readMockOverview();
     const runtime = createRuntime(fixtures, {
-      stateFilePath: appPaths.runtimeStatePath
+      stateFilePath: appPaths.runtimeStatePath,
+      scenarioStoreDir: appPaths.runtimeScenarioStateDir,
+      journalFilePath: appPaths.runtimeJournalPath
     });
 
     return {

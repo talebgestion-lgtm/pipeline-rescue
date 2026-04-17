@@ -2,6 +2,8 @@
 
 Pipeline Rescue is a HubSpot-native deal rescue assistant for sales teams.
 
+The local pilot runtime now persists through a state index, per-scenario shards, and an append-only recovery journal for safer operator testing.
+
 ## Core promise
 
 Every morning, reps and managers know:

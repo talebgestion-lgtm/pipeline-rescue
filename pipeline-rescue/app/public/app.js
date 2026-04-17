@@ -773,7 +773,10 @@ function renderSystemReport(report) {
       <p class="score-label">Runtime</p>
       <ul class="verification-list">
         <li>Directory: ${escapeHtml(runtime.runtimeDir || "unavailable")}</li>
-        <li>State file: ${escapeHtml(runtime.runtimeStatePath || "unavailable")}</li>
+        <li>State index: ${escapeHtml(runtime.runtimeStateIndexPath || runtime.runtimeStatePath || "unavailable")}</li>
+        <li>State format: ${escapeHtml(runtime.runtimeStateFormat || "unknown")}</li>
+        <li>Scenario store: ${escapeHtml(runtime.runtimeScenarioStoreDir || "unavailable")}</li>
+        <li>Scenario shards: ${escapeHtml(runtime.runtimeScenarioShardCount ?? 0)}</li>
         <li>Journal file: ${escapeHtml(runtime.runtimeJournalPath || "unavailable")}</li>
         <li>Journal entries loaded: ${escapeHtml(runtime.runtimeJournalEntriesLoaded ?? 0)}</li>
         <li>Journal replay used: ${runtime.runtimeJournalReplayUsed ? "yes" : "no"}</li>

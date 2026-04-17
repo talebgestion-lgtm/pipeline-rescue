@@ -40,6 +40,18 @@ function buildRelease(options = {}) {
   const packageManifest = JSON.parse(fs.readFileSync(path.join(appRoot, "package.json"), "utf8"));
   const appDir = path.join(outputDir, "app");
   const runtimeDir = path.join(outputDir, "runtime");
+  const runtimeArtifacts = new Set([
+    "runtime-state.json",
+    "runtime-journal.jsonl",
+    "runtime.lock.json",
+    "bootstrap-report.json",
+    "hubspot-install-state.json",
+    "scenario-state",
+    "backups",
+    "logs",
+    "snapshots",
+    "release"
+  ]);
 
   fs.rmSync(outputDir, { recursive: true, force: true });
   ensureDir(appDir);
@@ -47,7 +59,7 @@ function buildRelease(options = {}) {
 
   for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public", "scripts"]) {
     copyRecursive(path.join(appRoot, asset), path.join(appDir, asset), {
-      exclude: new Set(["runtime-state.json", "release"])
+      exclude: runtimeArtifacts
     });
   }
 

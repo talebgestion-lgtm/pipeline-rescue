@@ -73,6 +73,61 @@ test("runtime reloads persisted task and event state from disk", () => {
   assert.ok(overview.pilotEvents.length >= 3);
 });
 
+test("runtime persists a structured state index with scenario shards", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  const scenarioStoreDir = path.join(stateDir, "scenario-state");
+
+  const runtime = createRuntime(fixtures, { stateFilePath, scenarioStoreDir });
+  runtime.createTask("critical-stalled", "DL-1001");
+
+  const manifest = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+  const shardFiles = fs.readdirSync(scenarioStoreDir).filter((entry) => entry.endsWith(".json"));
+  const shardPayload = JSON.parse(fs.readFileSync(path.join(scenarioStoreDir, shardFiles[0]), "utf8"));
+
+  assert.equal(manifest.storageFormat, "SCENARIO_SHARDS_V1");
+  assert.equal(manifest.scenarioCount, 1);
+  assert.equal(shardFiles.length, 1);
+  assert.equal(shardPayload.scenarioId, "critical-stalled");
+  assert.equal(shardPayload.state.taskStates["DL-1001"].status, "CREATED");
+});
+
+test("runtime migrates a legacy snapshot into structured scenario shards", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  const scenarioStoreDir = path.join(stateDir, "scenario-state");
+
+  fs.writeFileSync(stateFilePath, JSON.stringify({
+    version: 1,
+    persistedAt: "2026-04-17T08:00:00.000Z",
+    scenarios: {
+      "critical-stalled": {
+        sequence: 2,
+        taskStates: {
+          "DL-1001": {
+            status: "CREATED",
+            taskId: "task_1",
+            subject: "Call the buyer champion",
+            createdAt: "2026-04-17T08:00:00.000Z"
+          }
+        },
+        feedbackStates: {},
+        feedbackHistory: [],
+        events: []
+      }
+    }
+  }, null, 2));
+
+  const runtime = createRuntime(fixtures, { stateFilePath, scenarioStoreDir });
+  const diagnostics = runtime.getRuntimeDiagnostics();
+  const manifest = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+
+  assert.equal(runtime.getOverview("critical-stalled").focusedDeal.taskState.status, "CREATED");
+  assert.equal(diagnostics.legacyStateMigrated, true);
+  assert.equal(manifest.storageFormat, "SCENARIO_SHARDS_V1");
+  assert.equal(fs.existsSync(path.join(scenarioStoreDir, manifest.scenarios["critical-stalled"].fileName)), true);
+});
+
 test("resetScenario clears persisted local runtime state for that scenario", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
   const stateFilePath = path.join(stateDir, "runtime-state.json");
@@ -135,6 +190,27 @@ test("runtime archives a corrupt journal and falls back to the state file", () =
   assert.equal(runtimeB.getOverview("critical-stalled").focusedDeal.taskState.status, "CREATED");
   assert.equal(diagnostics.journalLoadRecovered, true);
   assert.match(diagnostics.archivedCorruptJournalPath, /\.corrupt-/);
+});
+
+test("runtime rebuilds structured scenario shards from the journal when a shard is corrupt", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  const scenarioStoreDir = path.join(stateDir, "scenario-state");
+  const journalFilePath = path.join(stateDir, "runtime-journal.jsonl");
+
+  const runtimeA = createRuntime(fixtures, { stateFilePath, scenarioStoreDir, journalFilePath });
+  runtimeA.createTask("critical-stalled", "DL-1001");
+
+  const manifest = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+  const shardPath = path.join(scenarioStoreDir, manifest.scenarios["critical-stalled"].fileName);
+  fs.writeFileSync(shardPath, "{bad-json");
+
+  const runtimeB = createRuntime(fixtures, { stateFilePath, scenarioStoreDir, journalFilePath });
+  const diagnostics = runtimeB.getRuntimeDiagnostics();
+
+  assert.equal(runtimeB.getOverview("critical-stalled").focusedDeal.taskState.status, "CREATED");
+  assert.equal(diagnostics.journalReplayUsed, true);
+  assert.equal(diagnostics.archivedCorruptScenarioShardPaths.length, 1);
 });
 
 test("restoreState replaces persisted runtime state from an imported payload", () => {
