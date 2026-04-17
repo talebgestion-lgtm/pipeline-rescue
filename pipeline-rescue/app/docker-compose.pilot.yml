@@ -1,0 +1,21 @@
+services:
+  pipeline-rescue:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pipeline-rescue:pilot
+    ports:
+      - "4179:4179"
+    environment:
+      PORT: "4179"
+      PIPELINE_RESCUE_RUNTIME_DIR: /var/lib/pipeline-rescue/runtime
+      PIPELINE_RESCUE_ACCESS_MODE: SHARED_SECRET
+      PIPELINE_RESCUE_ACCESS_TOKEN: change-this-before-deploying
+      OPENAI_API_KEY: ""
+      HUBSPOT_CLIENT_SECRET: ""
+    volumes:
+      - pipeline_rescue_runtime:/var/lib/pipeline-rescue/runtime
+    restart: unless-stopped
+
+volumes:
+  pipeline_rescue_runtime:

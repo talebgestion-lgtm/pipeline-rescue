@@ -1,0 +1,13 @@
+release/
+runtime/
+data/runtime-state.json
+data/runtime-journal.jsonl
+data/runtime.lock.json
+data/scenario-state/
+data/backups/
+data/logs/
+data/snapshots/
+data/hubspot-install-state.json
+.env
+node_modules/
+npm-debug.log*

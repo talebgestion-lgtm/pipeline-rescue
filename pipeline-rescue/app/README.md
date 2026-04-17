@@ -54,6 +54,18 @@ $env:PIPELINE_RESCUE_ACCESS_TOKEN = "change-this-before-deploying"
 npm start
 ```
 
+Server deployment artifacts are included in the app root:
+
+- `Dockerfile`
+- `.dockerignore`
+- `docker-compose.pilot.yml`
+
+Pilot container launch:
+
+```powershell
+docker compose -f docker-compose.pilot.yml up --build
+```
+
 Bootstrap that runtime directory explicitly when needed:
 
 ```powershell
@@ -135,6 +147,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/runtime/snapshots/:snapshotId/restore`
 - `/api/runtime/integrity`
 - `POST /api/runtime/maintenance/compact`
+- `/api/deployment/profile`
 - `/health/live`
 - `/health/ready`
 
@@ -184,6 +197,7 @@ The UI now supports:
 - a controlled support-bundle restore flow with runtime backup before import
 - a runtime snapshot catalog with manual capture and rollback
 - a runtime integrity audit and one-click maintenance compaction path
+- a deployment profile that distinguishes blocked, hardening-needed, and pilot-ready states
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt
@@ -205,6 +219,10 @@ Maintenance endpoints:
 
 - `GET /api/runtime/integrity`
 - `POST /api/runtime/maintenance/compact`
+
+Deployment endpoint:
+
+- `GET /api/deployment/profile`
 
 If `PIPELINE_RESCUE_RUNTIME_DIR` is set, mutable files are written there instead of `app/data`.
 

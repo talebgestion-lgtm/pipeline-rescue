@@ -6,6 +6,7 @@ const { buildDealAnalysis, buildOverview } = require("./lib/analysis-engine");
 const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
+const { createDeploymentProfile } = require("./lib/deployment-profile");
 const {
   createAccessStatus,
   ensureAccess,
@@ -661,6 +662,13 @@ function buildSystemState(appState) {
     runtimeDiagnostics: appState.runtime ? appState.runtime.getRuntimeDiagnostics() : null,
     startupError: appState.startupError
   });
+  const deploymentProfile = createDeploymentProfile({
+    appPaths,
+    accessState,
+    gdprState,
+    hubspotState,
+    aiProviderState
+  });
 
   return {
     gdprState,
@@ -671,6 +679,7 @@ function buildSystemState(appState) {
     runtimeBootstrapReport,
     runtimeSnapshots,
     runtimeIntegrityReport,
+    deploymentProfile,
     systemReport
   };
 }
@@ -809,6 +818,7 @@ const server = http.createServer(async (request, response) => {
       runtimeBootstrapReport,
       runtimeSnapshots,
       runtimeIntegrityReport,
+      deploymentProfile,
       systemReport
     } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
@@ -854,6 +864,11 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/system/report") {
       sendJson(response, 200, systemReport);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/deployment/profile") {
+      sendJson(response, 200, deploymentProfile);
       return;
     }
 
@@ -1756,6 +1771,7 @@ const server = http.createServer(async (request, response) => {
         appPaths,
         packageManifest: appState.packageManifest,
         runtimeExport: appState.runtime ? appState.runtime.exportState() : null,
+        deploymentProfile,
         runtimeIntegrityReport,
         runtimeBootstrapReport,
         systemReport,
@@ -1781,6 +1797,7 @@ const server = http.createServer(async (request, response) => {
         appPaths,
         packageManifest: appState.packageManifest,
         systemReport,
+        deploymentProfile,
         runtimeIntegrityReport,
         runtimeBootstrapReport,
         runtimeExport: appState.runtime ? appState.runtime.exportState() : null,
@@ -1814,6 +1831,7 @@ const server = http.createServer(async (request, response) => {
         appPaths,
         packageManifest: appState.packageManifest,
         systemReport,
+        deploymentProfile,
         runtimeIntegrityReport,
         runtimeBootstrapReport,
         runtimeExport: appState.runtime.exportState(),

@@ -229,6 +229,10 @@ async function loadSystemReport() {
   return fetchJson("/api/system/report");
 }
 
+async function loadDeploymentProfile() {
+  return fetchJson("/api/deployment/profile");
+}
+
 async function loadRuntimeIntegrity() {
   return fetchJson("/api/runtime/integrity");
 }
@@ -870,6 +874,79 @@ function renderRuntimeIntegrity(report) {
       <p class="score-label">Warnings</p>
       <ul class="verification-list">
         ${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No runtime warning reported.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
+function renderDeploymentProfile(report) {
+  const container = document.getElementById("deployment-profile");
+  const blockers = Array.isArray(report && report.blockers) ? report.blockers : [];
+  const hardening = Array.isArray(report && report.hardening) ? report.hardening : [];
+  const checks = Array.isArray(report && report.checks) ? report.checks : [];
+  const artifacts = report && report.artifacts ? report.artifacts : {};
+  const requiredEnvironment = Array.isArray(report && report.requiredEnvironment) ? report.requiredEnvironment : [];
+
+  if (!report) {
+    container.innerHTML = `
+      <p class="verification-note">Deployment profile unavailable.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Deployment</span>
+        <span class="verification-value">${escapeHtml(report.status)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Failures</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.failureCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Warnings</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.warningCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Runtime mode</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.runtimeStorageMode || "unknown")}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${escapeHtml(report.summary || "No deployment summary available.")}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Artifacts</p>
+      <ul class="verification-list">
+        <li>Dockerfile: ${artifacts.dockerfilePresent ? "present" : "missing"} | ${escapeHtml(artifacts.dockerfilePath || "unavailable")}</li>
+        <li>.dockerignore: ${artifacts.dockerignorePresent ? "present" : "missing"} | ${escapeHtml(artifacts.dockerignorePath || "unavailable")}</li>
+        <li>Compose file: ${artifacts.composePresent ? "present" : "missing"} | ${escapeHtml(artifacts.composePath || "unavailable")}</li>
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Blocking items</p>
+      <ul class="verification-list">
+        ${blockers.map((item) => `<li>${escapeHtml(item.label)}: ${escapeHtml(item.remediation)}</li>`).join("") || "<li>No blocking item reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Hardening items</p>
+      <ul class="verification-list">
+        ${hardening.map((item) => `<li>${escapeHtml(item.label)}: ${escapeHtml(item.remediation)}</li>`).join("") || "<li>No hardening gap reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Required environment</p>
+      <ul class="verification-list">
+        ${requiredEnvironment.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No required environment variable reported.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${checks.map((item) => `<li>${escapeHtml(item.status)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No deployment check available.</li>"}
       </ul>
     </div>
   `;
@@ -1798,12 +1875,14 @@ async function refreshComplianceConfig() {
 }
 
 async function refreshSystemReport() {
-  const [systemReport, runtimeIntegrity] = await Promise.all([
+  const [systemReport, runtimeIntegrity, deploymentProfile] = await Promise.all([
     loadSystemReport(),
-    loadRuntimeIntegrity()
+    loadRuntimeIntegrity(),
+    loadDeploymentProfile()
   ]);
   renderSystemReport(systemReport);
   renderRuntimeIntegrity(runtimeIntegrity);
+  renderDeploymentProfile(deploymentProfile);
 }
 
 async function refreshRuntimeSnapshots() {

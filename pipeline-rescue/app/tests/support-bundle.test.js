@@ -15,6 +15,9 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
     systemReport: {
       status: "DEGRADED"
     },
+    deploymentProfile: {
+      status: "BLOCKED"
+    },
     runtimeIntegrityReport: {
       status: "READY"
     },
@@ -71,6 +74,7 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
   assert.equal(bundle.runtime.runtimeScenarioStoreDir, "C:\\PipelineRescueData\\scenario-state");
   assert.equal(bundle.runtime.runtimeScenarioShardCount, 1);
   assert.equal(bundle.runtime.integrityReport.status, "READY");
+  assert.equal(bundle.deploymentProfile.status, "BLOCKED");
   assert.equal(bundle.hubspot.installState.installCount, 1);
   assert.equal(bundle.hubspot.installState.installs[0].portalId, "123456");
   assert.equal("accessToken" in bundle.hubspot.installState.installs[0], false);

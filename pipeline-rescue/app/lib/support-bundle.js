@@ -17,6 +17,7 @@ function buildSupportBundle(options = {}) {
   const appPaths = options.appPaths || {};
   const packageManifest = options.packageManifest || {};
   const systemReport = options.systemReport || null;
+  const deploymentProfile = options.deploymentProfile || null;
   const runtimeIntegrityReport = options.runtimeIntegrityReport || null;
   const runtimeBootstrapReport = options.runtimeBootstrapReport || null;
   const runtimeExport = options.runtimeExport || null;
@@ -46,6 +47,7 @@ function buildSupportBundle(options = {}) {
       exportState: runtimeExport
     },
     systemReport,
+    deploymentProfile,
     compliance: {
       error: gdprState.error || null,
       report: gdprState.complianceReport || null,

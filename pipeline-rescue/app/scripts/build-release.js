@@ -57,7 +57,7 @@ function buildRelease(options = {}) {
   ensureDir(appDir);
   ensureDir(runtimeDir);
 
-  for (const asset of ["server.js", "package.json", "README.md", ".env.example", "data", "lib", "public", "scripts"]) {
+  for (const asset of ["server.js", "package.json", "README.md", ".env.example", "Dockerfile", ".dockerignore", "docker-compose.pilot.yml", "data", "lib", "public", "scripts"]) {
     copyRecursive(path.join(appRoot, asset), path.join(appDir, asset), {
       exclude: runtimeArtifacts
     });
