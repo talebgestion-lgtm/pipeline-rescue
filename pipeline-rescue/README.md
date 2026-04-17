@@ -105,3 +105,4 @@ It now has:
 - a runtime snapshot capture and rollback path for safer pilot recovery
 - single-instance runtime locking so a pilot cannot corrupt the same writable runtime from two parallel processes
 - optional shared-secret access protection so a deployed pilot instance is not left open by default
+- append-only runtime journal replay so a pilot instance can recover from a stale or broken primary state file

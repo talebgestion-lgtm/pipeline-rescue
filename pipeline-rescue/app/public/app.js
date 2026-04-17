@@ -774,6 +774,9 @@ function renderSystemReport(report) {
       <ul class="verification-list">
         <li>Directory: ${escapeHtml(runtime.runtimeDir || "unavailable")}</li>
         <li>State file: ${escapeHtml(runtime.runtimeStatePath || "unavailable")}</li>
+        <li>Journal file: ${escapeHtml(runtime.runtimeJournalPath || "unavailable")}</li>
+        <li>Journal entries loaded: ${escapeHtml(runtime.runtimeJournalEntriesLoaded ?? 0)}</li>
+        <li>Journal replay used: ${runtime.runtimeJournalReplayUsed ? "yes" : "no"}</li>
         <li>Lock file: ${escapeHtml(runtime.runtimeLockPath || "unavailable")}</li>
         <li>Lock status: ${escapeHtml(runtime.runtimeLockStatus || "unknown")}</li>
         <li>Lock owner PID: ${escapeHtml(runtime.runtimeLockOwnerPid || "n/a")}</li>

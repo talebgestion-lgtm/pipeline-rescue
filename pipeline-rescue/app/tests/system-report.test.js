@@ -33,6 +33,9 @@ test("system report is degraded when GDPR blocks deployment", () => {
     },
     runtimeDiagnostics: {
       stateFilePath: "runtime-state.json",
+      journalFilePath: "runtime-journal.jsonl",
+      journalEntriesLoaded: 0,
+      journalReplayUsed: false,
       stateLoadRecovered: false,
       lastPersistSucceeded: true
     },
@@ -107,6 +110,9 @@ test("system report warns when external runtime storage has no bootstrap report"
     runtimeBootstrapReport: null,
     runtimeDiagnostics: {
       stateFilePath: "C:\\PipelineRescueData\\runtime-state.json",
+      journalFilePath: "C:\\PipelineRescueData\\runtime-journal.jsonl",
+      journalEntriesLoaded: 0,
+      journalReplayUsed: false,
       stateLoadRecovered: false,
       lastPersistSucceeded: true
     },
@@ -171,6 +177,9 @@ test("system report exposes runtime snapshot summary", () => {
     },
     runtimeDiagnostics: {
       stateFilePath: "C:\\PipelineRescue\\data\\runtime-state.json",
+      journalFilePath: "C:\\PipelineRescue\\data\\runtime-journal.jsonl",
+      journalEntriesLoaded: 4,
+      journalReplayUsed: true,
       stateLoadRecovered: false,
       lastPersistSucceeded: true
     },
@@ -180,10 +189,14 @@ test("system report exposes runtime snapshot summary", () => {
   assert.equal(report.runtime.snapshotCount, 1);
   assert.equal(report.runtime.latestSnapshotId, "snapshot-2026-04-16T20-00-00-000Z");
   assert.equal(report.runtime.latestSnapshotAt, "2026-04-16T20:00:00.000Z");
+  assert.equal(report.runtime.runtimeJournalPath, "C:\\PipelineRescue\\data\\runtime-journal.jsonl");
+  assert.equal(report.runtime.runtimeJournalEntriesLoaded, 4);
+  assert.equal(report.runtime.runtimeJournalReplayUsed, true);
   assert.equal(report.runtime.runtimeLockStatus, "ACQUIRED");
   assert.equal(report.runtime.runtimeLockOwnerPid, 4242);
   assert.equal(report.access.mode, "SHARED_SECRET");
   assert.equal(report.access.status, "PROTECTED");
+  assert.ok(report.warnings.some((warning) => /rebuilt from the append-only journal/i.test(warning)));
 });
 
 test("system report fails when runtime lock is blocked by another process", () => {

@@ -102,6 +102,41 @@ test("runtime recovers from a corrupt persisted state file", () => {
   assert.equal(overview.focusedDeal.taskState.status, "NOT_CREATED");
 });
 
+test("runtime replays the latest journal entry when the state file is missing", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  const journalFilePath = path.join(stateDir, "runtime-journal.jsonl");
+
+  const runtimeA = createRuntime(fixtures, { stateFilePath, journalFilePath });
+  runtimeA.createTask("critical-stalled", "DL-1001");
+
+  fs.unlinkSync(stateFilePath);
+
+  const runtimeB = createRuntime(fixtures, { stateFilePath, journalFilePath });
+  const diagnostics = runtimeB.getRuntimeDiagnostics();
+
+  assert.equal(runtimeB.getOverview("critical-stalled").focusedDeal.taskState.status, "CREATED");
+  assert.equal(diagnostics.journalReplayUsed, true);
+  assert.ok(diagnostics.journalEntriesLoaded >= 1);
+});
+
+test("runtime archives a corrupt journal and falls back to the state file", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
+  const stateFilePath = path.join(stateDir, "runtime-state.json");
+  const journalFilePath = path.join(stateDir, "runtime-journal.jsonl");
+
+  const runtimeA = createRuntime(fixtures, { stateFilePath, journalFilePath });
+  runtimeA.createTask("critical-stalled", "DL-1001");
+  fs.writeFileSync(journalFilePath, "{bad-json");
+
+  const runtimeB = createRuntime(fixtures, { stateFilePath, journalFilePath });
+  const diagnostics = runtimeB.getRuntimeDiagnostics();
+
+  assert.equal(runtimeB.getOverview("critical-stalled").focusedDeal.taskState.status, "CREATED");
+  assert.equal(diagnostics.journalLoadRecovered, true);
+  assert.match(diagnostics.archivedCorruptJournalPath, /\.corrupt-/);
+});
+
 test("restoreState replaces persisted runtime state from an imported payload", () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "pipeline-rescue-runtime-"));
   const stateFilePath = path.join(stateDir, "runtime-state.json");

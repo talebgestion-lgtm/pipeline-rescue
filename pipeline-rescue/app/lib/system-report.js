@@ -99,6 +99,17 @@ function createSystemReport(options) {
 
   checks.push(
     buildCheck(
+      "runtime_journal",
+      "Runtime journal",
+      runtimeDiagnostics && runtimeDiagnostics.archivedCorruptJournalPath ? "WARN" : "PASS",
+      runtimeDiagnostics
+        ? `Journal file ${runtimeDiagnostics.journalFilePath || "unavailable"}. Entries loaded: ${runtimeDiagnostics.journalEntriesLoaded || 0}. Journal replay used: ${Boolean(runtimeDiagnostics.journalReplayUsed)}.`
+        : "Runtime journal diagnostics unavailable."
+    )
+  );
+
+  checks.push(
+    buildCheck(
       "gdpr_config",
       "GDPR configuration",
       gdprState.error ? "FAIL" : "PASS",
@@ -128,6 +139,14 @@ function createSystemReport(options) {
 
   if (runtimeDiagnostics && runtimeDiagnostics.stateLoadRecovered) {
     warnings.push("A corrupt runtime-state file was archived and a clean state was rebuilt.");
+  }
+
+  if (runtimeDiagnostics && runtimeDiagnostics.journalReplayUsed) {
+    warnings.push("Runtime state was rebuilt from the append-only journal.");
+  }
+
+  if (runtimeDiagnostics && runtimeDiagnostics.archivedCorruptJournalPath) {
+    warnings.push(`A corrupt runtime journal was archived to ${runtimeDiagnostics.archivedCorruptJournalPath}.`);
   }
 
   if (appPaths.runtimeStorageMode === "EXTERNAL_RUNTIME_DIR" && !runtimeBootstrapReport) {
@@ -165,6 +184,9 @@ function createSystemReport(options) {
       storageMode: appPaths.runtimeStorageMode || "unknown",
       runtimeDir: appPaths.runtimeDir || null,
       runtimeStatePath: runtimeDiagnostics ? runtimeDiagnostics.stateFilePath : null,
+      runtimeJournalPath: runtimeDiagnostics ? runtimeDiagnostics.journalFilePath : (appPaths.runtimeJournalPath || null),
+      runtimeJournalEntriesLoaded: runtimeDiagnostics ? runtimeDiagnostics.journalEntriesLoaded || 0 : 0,
+      runtimeJournalReplayUsed: runtimeDiagnostics ? Boolean(runtimeDiagnostics.journalReplayUsed) : false,
       runtimeLockPath: runtimeLock ? runtimeLock.lockPath : (appPaths.runtimeLockPath || null),
       runtimeLockStatus: runtimeLock ? runtimeLock.status : "unknown",
       runtimeLockOwnerPid: runtimeLock && runtimeLock.owner ? runtimeLock.owner.pid || null : null,

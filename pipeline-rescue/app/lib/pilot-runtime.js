@@ -51,6 +51,8 @@ const FEEDBACK_THEME_LABELS = {
   UNCLASSIFIED: "Unclassified operator signal"
 };
 
+const JOURNAL_MAX_ENTRIES = 200;
+
 const REASON_CODE_THEME_MAP = {
   ACCURATE_PRIORITY: "PRIORITY_VALIDATED",
   CLEAR_ACTION: "ACTION_CLARITY_VALIDATED",
@@ -143,6 +145,11 @@ function archiveCorruptFile(filePath, content) {
   return archivedPath;
 }
 
+function parseIsoTimestamp(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 function toSerializableState(state) {
   return {
     sequence: state.sequence,
@@ -179,13 +186,19 @@ function validateImportedRuntimeState(payload) {
 
 function createRuntime(fixtures, options = {}) {
   const stateFilePath = options.stateFilePath || path.join(__dirname, "..", "data", "runtime-state.json");
+  const journalFilePath = options.journalFilePath || path.join(path.dirname(stateFilePath), "runtime-journal.jsonl");
   const scenarioState = new Map();
   const runtimeDiagnostics = {
     stateLoadRecovered: false,
     archivedCorruptStatePath: null,
+    journalLoadRecovered: false,
+    archivedCorruptJournalPath: null,
+    journalReplayUsed: false,
+    journalEntriesLoaded: 0,
     lastPersistAt: null,
     lastPersistSucceeded: true,
-    lastRestoreAt: null
+    lastRestoreAt: null,
+    lastJournalAppendAt: null
   };
 
   function writeJsonAtomic(filePath, payload) {
@@ -195,21 +208,101 @@ function createRuntime(fixtures, options = {}) {
     fs.renameSync(tempFilePath, filePath);
   }
 
-  function persistState() {
-    const payload = {
+  function buildSerializableScenarios() {
+    return Object.fromEntries(
+      Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
+        scenarioId,
+        toSerializableState(state)
+      ])
+    );
+  }
+
+  function serializeStatePayload(persistedAt) {
+    return {
       version: 1,
-      scenarios: Object.fromEntries(
-        Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
-          scenarioId,
-          toSerializableState(state)
-        ])
-      )
+      persistedAt,
+      scenarios: buildSerializableScenarios()
+    };
+  }
+
+  function rewriteJournalWithLatestEntries() {
+    if (!fs.existsSync(journalFilePath)) {
+      return;
+    }
+
+    const lines = fs.readFileSync(journalFilePath, "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean);
+    if (lines.length <= JOURNAL_MAX_ENTRIES) {
+      return;
+    }
+
+    fs.writeFileSync(`${journalFilePath}.tmp`, `${lines.slice(-JOURNAL_MAX_ENTRIES).join("\n")}\n`);
+    fs.renameSync(`${journalFilePath}.tmp`, journalFilePath);
+  }
+
+  function appendJournalEntry(payload) {
+    const entry = {
+      version: 1,
+      recordedAt: payload.persistedAt,
+      scenarios: payload.scenarios
     };
 
+    fs.mkdirSync(path.dirname(journalFilePath), { recursive: true });
+    fs.appendFileSync(journalFilePath, `${JSON.stringify(entry)}\n`);
+    rewriteJournalWithLatestEntries();
+    runtimeDiagnostics.lastJournalAppendAt = entry.recordedAt;
+  }
+
+  function loadLatestJournalEntry() {
+    if (!fs.existsSync(journalFilePath)) {
+      runtimeDiagnostics.journalEntriesLoaded = 0;
+      return null;
+    }
+
     try {
+      const lines = fs.readFileSync(journalFilePath, "utf8")
+        .split(/\r?\n/)
+        .filter(Boolean);
+      runtimeDiagnostics.journalEntriesLoaded = lines.length;
+
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const payload = JSON.parse(lines[index]);
+        if (payload && typeof payload === "object" && payload.scenarios && typeof payload.scenarios === "object") {
+          return payload;
+        }
+      }
+
+      return null;
+    } catch (error) {
+      runtimeDiagnostics.journalLoadRecovered = true;
+      runtimeDiagnostics.archivedCorruptJournalPath = archiveCorruptFile(
+        journalFilePath,
+        fs.readFileSync(journalFilePath, "utf8")
+      );
+      runtimeDiagnostics.journalEntriesLoaded = 0;
+      return null;
+    }
+  }
+
+  function loadScenarioStateFromPayload(payload) {
+    scenarioState.clear();
+    const scenarios = payload.scenarios || {};
+
+    for (const [scenarioId, state] of Object.entries(scenarios)) {
+      scenarioState.set(scenarioId, fromSerializableState(state));
+    }
+  }
+
+  function persistState() {
+    const persistedAt = new Date().toISOString();
+    const payload = serializeStatePayload(persistedAt);
+
+    try {
+      appendJournalEntry(payload);
       writeJsonAtomic(stateFilePath, JSON.stringify(payload, null, 2));
       runtimeDiagnostics.lastPersistSucceeded = true;
-      runtimeDiagnostics.lastPersistAt = new Date().toISOString();
+      runtimeDiagnostics.lastPersistAt = persistedAt;
     } catch (error) {
       runtimeDiagnostics.lastPersistSucceeded = false;
       throw error;
@@ -217,24 +310,37 @@ function createRuntime(fixtures, options = {}) {
   }
 
   function loadState() {
-    if (!fs.existsSync(stateFilePath)) {
+    let statePayload = null;
+
+    if (fs.existsSync(stateFilePath)) {
+      try {
+        statePayload = JSON.parse(fs.readFileSync(stateFilePath, "utf8"));
+      } catch (error) {
+        runtimeDiagnostics.stateLoadRecovered = true;
+        runtimeDiagnostics.archivedCorruptStatePath = archiveCorruptFile(
+          stateFilePath,
+          fs.readFileSync(stateFilePath, "utf8")
+        );
+      }
+    }
+
+    const latestJournalEntry = loadLatestJournalEntry();
+    const shouldUseJournal = Boolean(latestJournalEntry) && (
+      !statePayload
+      || parseIsoTimestamp(latestJournalEntry.recordedAt) > parseIsoTimestamp(statePayload.persistedAt)
+    );
+
+    if (shouldUseJournal) {
+      runtimeDiagnostics.stateLoadRecovered = !statePayload || runtimeDiagnostics.stateLoadRecovered;
+      runtimeDiagnostics.journalReplayUsed = true;
+      loadScenarioStateFromPayload({
+        scenarios: latestJournalEntry.scenarios || {}
+      });
       return;
     }
 
-    try {
-      const rawContent = fs.readFileSync(stateFilePath, "utf8");
-      const payload = JSON.parse(rawContent);
-      const scenarios = payload.scenarios || {};
-
-      for (const [scenarioId, state] of Object.entries(scenarios)) {
-        scenarioState.set(scenarioId, fromSerializableState(state));
-      }
-    } catch (error) {
-      runtimeDiagnostics.stateLoadRecovered = true;
-      runtimeDiagnostics.archivedCorruptStatePath = archiveCorruptFile(
-        stateFilePath,
-        fs.readFileSync(stateFilePath, "utf8")
-      );
+    if (statePayload) {
+      loadScenarioStateFromPayload(statePayload);
     }
   }
 
@@ -852,16 +958,12 @@ function createRuntime(fixtures, options = {}) {
   function exportState() {
     return {
       stateFilePath,
+      journalFilePath,
       runtimeDiagnostics: {
         ...runtimeDiagnostics,
         scenarioCount: scenarioState.size
       },
-      scenarios: Object.fromEntries(
-        Array.from(scenarioState.entries()).map(([scenarioId, state]) => [
-          scenarioId,
-          toSerializableState(state)
-        ])
-      )
+      scenarios: buildSerializableScenarios()
     };
   }
 
@@ -891,6 +993,7 @@ function createRuntime(fixtures, options = {}) {
     return {
       ...runtimeDiagnostics,
       stateFilePath,
+      journalFilePath,
       scenarioCount: scenarioState.size
     };
   }

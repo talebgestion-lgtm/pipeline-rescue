@@ -28,6 +28,7 @@ function resolveAppPaths(options = {}) {
     runtimeSnapshotsDir: path.join(runtimeDir, "snapshots"),
     runtimeLogsDir: path.join(runtimeDir, "logs"),
     runtimeLockPath: path.join(runtimeDir, "runtime.lock.json"),
+    runtimeJournalPath: path.join(runtimeDir, "runtime-journal.jsonl"),
     bootstrapReportPath: path.join(runtimeDir, "bootstrap-report.json"),
     runtimeStorageMode: path.resolve(runtimeDir) === path.resolve(bundledDataDir)
       ? "IN_PLACE"

@@ -183,6 +183,7 @@ The UI now supports:
 - a runtime snapshot catalog with manual capture and rollback
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
+- append-only runtime journal replay when the main state file is missing, stale, or corrupt
 - a local compliance-config editor for real legal inputs
 - a guided compliance form above the raw JSON editor
 - an installable PWA shell for desktop/mobile pilots
