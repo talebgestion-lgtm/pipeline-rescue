@@ -15,6 +15,9 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
     systemReport: {
       status: "DEGRADED"
     },
+    runtimeIntegrityReport: {
+      status: "READY"
+    },
     runtimeBootstrapReport: {
       generatedAt: "2026-04-16T10:00:00Z"
     },
@@ -67,6 +70,7 @@ test("buildSupportBundle includes runtime, system, and sanitized HubSpot state",
   assert.equal(bundle.runtime.runtimeStateFormat, "SCENARIO_SHARDS_V1");
   assert.equal(bundle.runtime.runtimeScenarioStoreDir, "C:\\PipelineRescueData\\scenario-state");
   assert.equal(bundle.runtime.runtimeScenarioShardCount, 1);
+  assert.equal(bundle.runtime.integrityReport.status, "READY");
   assert.equal(bundle.hubspot.installState.installCount, 1);
   assert.equal(bundle.hubspot.installState.installs[0].portalId, "123456");
   assert.equal("accessToken" in bundle.hubspot.installState.installs[0], false);

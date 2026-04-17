@@ -199,6 +199,8 @@ function createSystemReport(options) {
       runtimeJournalPath: runtimeDiagnostics ? runtimeDiagnostics.journalFilePath : (appPaths.runtimeJournalPath || null),
       runtimeJournalEntriesLoaded: runtimeDiagnostics ? runtimeDiagnostics.journalEntriesLoaded || 0 : 0,
       runtimeJournalReplayUsed: runtimeDiagnostics ? Boolean(runtimeDiagnostics.journalReplayUsed) : false,
+      runtimeLastMaintenanceAt: runtimeDiagnostics ? runtimeDiagnostics.lastMaintenanceAt || null : null,
+      runtimeLastMaintenanceType: runtimeDiagnostics ? runtimeDiagnostics.lastMaintenanceType || null : null,
       runtimeLockPath: runtimeLock ? runtimeLock.lockPath : (appPaths.runtimeLockPath || null),
       runtimeLockStatus: runtimeLock ? runtimeLock.status : "unknown",
       runtimeLockOwnerPid: runtimeLock && runtimeLock.owner ? runtimeLock.owner.pid || null : null,

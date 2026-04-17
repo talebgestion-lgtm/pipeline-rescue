@@ -17,6 +17,7 @@ function buildSupportBundle(options = {}) {
   const appPaths = options.appPaths || {};
   const packageManifest = options.packageManifest || {};
   const systemReport = options.systemReport || null;
+  const runtimeIntegrityReport = options.runtimeIntegrityReport || null;
   const runtimeBootstrapReport = options.runtimeBootstrapReport || null;
   const runtimeExport = options.runtimeExport || null;
   const gdprState = options.gdprState || {};
@@ -39,6 +40,7 @@ function buildSupportBundle(options = {}) {
       runtimeStateFormat: runtimeExport ? runtimeExport.stateStorageFormat || "unknown" : "unknown",
       runtimeScenarioStoreDir: runtimeExport ? runtimeExport.scenarioStoreDir || null : null,
       runtimeScenarioShardCount: runtimeExport ? runtimeExport.scenarioShardCount || 0 : 0,
+      integrityReport: runtimeIntegrityReport,
       bootstrapReportPath: appPaths.bootstrapReportPath || null,
       bootstrapReport: runtimeBootstrapReport,
       exportState: runtimeExport

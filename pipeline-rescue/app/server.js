@@ -14,6 +14,7 @@ const {
 } = require("./lib/access-control");
 const { acquireRuntimeLock, releaseRuntimeLock } = require("./lib/runtime-lock");
 const { buildSupportBundle, validateSupportBundlePayload } = require("./lib/support-bundle");
+const { inspectRuntimeIntegrity, writeRuntimeMaintenanceReport } = require("./lib/runtime-maintenance");
 const {
   createRuntimeSnapshot,
   listRuntimeSnapshots,
@@ -639,6 +640,14 @@ function buildSystemState(appState) {
   const hubspotState = getHubSpotState();
   const runtimeBootstrapReport = readRuntimeBootstrapReport();
   const runtimeSnapshots = listRuntimeSnapshots(appPaths);
+  const runtimeExport = appState.runtime ? appState.runtime.exportState() : null;
+  const runtimeIntegrityReport = appState.runtime
+    ? inspectRuntimeIntegrity({
+      appPaths,
+      runtimeExport,
+      runtimeSnapshots
+    })
+    : null;
   const systemReport = createSystemReport({
     packageManifest: appState.packageManifest,
     fixtures: appState.fixtures,
@@ -661,6 +670,7 @@ function buildSystemState(appState) {
     accessState,
     runtimeBootstrapReport,
     runtimeSnapshots,
+    runtimeIntegrityReport,
     systemReport
   };
 }
@@ -726,7 +736,8 @@ function restoreSupportBundleIntoAppState(appState, bundle, sourceLabel) {
     },
     runtimeState,
     systemReport: nextSystemState.systemReport,
-    runtimeSnapshots: nextSystemState.runtimeSnapshots
+    runtimeSnapshots: nextSystemState.runtimeSnapshots,
+    runtimeIntegrityReport: nextSystemState.runtimeIntegrityReport
   };
 }
 
@@ -797,6 +808,7 @@ const server = http.createServer(async (request, response) => {
       hubspotState,
       runtimeBootstrapReport,
       runtimeSnapshots,
+      runtimeIntegrityReport,
       systemReport
     } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
@@ -842,6 +854,15 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/system/report") {
       sendJson(response, 200, systemReport);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/runtime/integrity") {
+      if (!ensureRuntimeAvailable(appState, response)) {
+        return;
+      }
+
+      sendJson(response, 200, runtimeIntegrityReport);
       return;
     }
 
@@ -1735,6 +1756,7 @@ const server = http.createServer(async (request, response) => {
         appPaths,
         packageManifest: appState.packageManifest,
         runtimeExport: appState.runtime ? appState.runtime.exportState() : null,
+        runtimeIntegrityReport,
         runtimeBootstrapReport,
         systemReport,
         gdprState,
@@ -1759,6 +1781,7 @@ const server = http.createServer(async (request, response) => {
         appPaths,
         packageManifest: appState.packageManifest,
         systemReport,
+        runtimeIntegrityReport,
         runtimeBootstrapReport,
         runtimeExport: appState.runtime ? appState.runtime.exportState() : null,
         gdprState,
@@ -1779,6 +1802,50 @@ const server = http.createServer(async (request, response) => {
     if (request.method === "POST" && url.pathname === "/api/runtime/support-bundle/restore") {
       const bundle = validateSupportBundlePayload(await readJsonBody(request));
       sendJson(response, 200, restoreSupportBundleIntoAppState(appState, bundle, "uploaded-support-bundle"));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/runtime/maintenance/compact") {
+      if (!ensureRuntimeAvailable(appState, response)) {
+        return;
+      }
+
+      const snapshot = createRuntimeSnapshot({
+        appPaths,
+        packageManifest: appState.packageManifest,
+        systemReport,
+        runtimeIntegrityReport,
+        runtimeBootstrapReport,
+        runtimeExport: appState.runtime.exportState(),
+        gdprState,
+        aiPolicyState,
+        aiProviderState,
+        hubspotState,
+        reason: "pre-runtime-maintenance"
+      });
+      const runtimeState = appState.runtime.compactStorage();
+      const nextSystemState = buildSystemState(appState);
+      const maintenanceReport = {
+        executedAt: new Date().toISOString(),
+        type: "COMPACT_RUNTIME_STORAGE",
+        snapshotId: snapshot.snapshotId,
+        runtimeStateFormat: runtimeState.stateStorageFormat,
+        runtimeScenarioShardCount: runtimeState.scenarioShardCount,
+        journalEntriesAfterCompaction: 1
+      };
+      const reportPath = writeRuntimeMaintenanceReport(appPaths, maintenanceReport);
+
+      sendJson(response, 200, {
+        maintenance: {
+          ...maintenanceReport,
+          reportPath
+        },
+        snapshot,
+        runtimeState,
+        integrityReport: nextSystemState.runtimeIntegrityReport,
+        systemReport: nextSystemState.systemReport,
+        runtimeSnapshots: nextSystemState.runtimeSnapshots
+      });
       return;
     }
 

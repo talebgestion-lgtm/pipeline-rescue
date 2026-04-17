@@ -211,7 +211,9 @@ function createRuntime(fixtures, options = {}) {
     lastPersistAt: null,
     lastPersistSucceeded: true,
     lastRestoreAt: null,
-    lastJournalAppendAt: null
+    lastJournalAppendAt: null,
+    lastMaintenanceAt: null,
+    lastMaintenanceType: null
   };
 
   function buildSerializableScenarios() {
@@ -257,6 +259,21 @@ function createRuntime(fixtures, options = {}) {
     fs.mkdirSync(path.dirname(journalFilePath), { recursive: true });
     fs.appendFileSync(journalFilePath, `${JSON.stringify(entry)}\n`);
     rewriteJournalWithLatestEntries();
+    runtimeDiagnostics.lastJournalAppendAt = entry.recordedAt;
+  }
+
+  function rewriteJournalToCurrentState(payload) {
+    const entry = {
+      version: 1,
+      recordedAt: payload.persistedAt,
+      scenarios: payload.scenarios
+    };
+    const tempFilePath = `${journalFilePath}.tmp`;
+
+    fs.mkdirSync(path.dirname(journalFilePath), { recursive: true });
+    fs.writeFileSync(tempFilePath, `${JSON.stringify(entry)}\n`);
+    fs.renameSync(tempFilePath, journalFilePath);
+    runtimeDiagnostics.journalEntriesLoaded = 1;
     runtimeDiagnostics.lastJournalAppendAt = entry.recordedAt;
   }
 
@@ -1088,6 +1105,21 @@ function createRuntime(fixtures, options = {}) {
     return exportState();
   }
 
+  function compactStorage() {
+    const persistedAt = new Date().toISOString();
+    const payload = serializeStatePayload(persistedAt);
+
+    writeStructuredStateSnapshot(payload);
+    rewriteJournalToCurrentState(payload);
+    runtimeDiagnostics.lastPersistSucceeded = true;
+    runtimeDiagnostics.lastPersistAt = persistedAt;
+    runtimeDiagnostics.journalReplayUsed = false;
+    runtimeDiagnostics.lastMaintenanceAt = persistedAt;
+    runtimeDiagnostics.lastMaintenanceType = "COMPACT_RUNTIME_STORAGE";
+
+    return exportState();
+  }
+
   function getRuntimeDiagnostics() {
     return {
       ...runtimeDiagnostics,
@@ -1113,6 +1145,7 @@ function createRuntime(fixtures, options = {}) {
     recordFeedback,
     getEvents,
     exportState,
+    compactStorage,
     restoreState,
     resetScenario
   };

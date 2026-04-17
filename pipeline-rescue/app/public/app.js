@@ -32,6 +32,7 @@ const appState = {
   hubspotLiveQueue: null,
   hubspotLiveRescueReport: null,
   runtimeSnapshots: [],
+  runtimeIntegrity: null,
   accessStatus: null,
   accessGranted: false,
   accessToken: readStoredAccessToken(),
@@ -228,6 +229,10 @@ async function loadSystemReport() {
   return fetchJson("/api/system/report");
 }
 
+async function loadRuntimeIntegrity() {
+  return fetchJson("/api/runtime/integrity");
+}
+
 async function resetScenarioState() {
   return postAction("/api/runtime/reset");
 }
@@ -289,6 +294,12 @@ async function createRuntimeSnapshotRequest(reason) {
 
 async function restoreRuntimeSnapshotRequest(snapshotId) {
   return fetchJson(`/api/runtime/snapshots/${encodeURIComponent(snapshotId)}/restore`, {
+    method: "POST"
+  });
+}
+
+async function runRuntimeMaintenanceRequest() {
+  return fetchJson("/api/runtime/maintenance/compact", {
     method: "POST"
   });
 }
@@ -780,6 +791,8 @@ function renderSystemReport(report) {
         <li>Journal file: ${escapeHtml(runtime.runtimeJournalPath || "unavailable")}</li>
         <li>Journal entries loaded: ${escapeHtml(runtime.runtimeJournalEntriesLoaded ?? 0)}</li>
         <li>Journal replay used: ${runtime.runtimeJournalReplayUsed ? "yes" : "no"}</li>
+        <li>Last maintenance: ${escapeHtml(runtime.runtimeLastMaintenanceAt || "never")}</li>
+        <li>Maintenance type: ${escapeHtml(runtime.runtimeLastMaintenanceType || "none")}</li>
         <li>Lock file: ${escapeHtml(runtime.runtimeLockPath || "unavailable")}</li>
         <li>Lock status: ${escapeHtml(runtime.runtimeLockStatus || "unknown")}</li>
         <li>Lock owner PID: ${escapeHtml(runtime.runtimeLockOwnerPid || "n/a")}</li>
@@ -808,6 +821,55 @@ function renderSystemReport(report) {
       <p class="score-label">Checks</p>
       <ul class="verification-list">
         ${(report.checks || []).map((item) => `<li>${item.status} | ${item.label}: ${item.detail}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function renderRuntimeIntegrity(report) {
+  const container = document.getElementById("runtime-integrity-status");
+  const checks = Array.isArray(report && report.checks) ? report.checks : [];
+  const warnings = Array.isArray(report && report.warnings) ? report.warnings : [];
+  const metrics = report && report.metrics ? report.metrics : {};
+
+  appState.runtimeIntegrity = report;
+
+  if (!report) {
+    container.innerHTML = `
+      <p class="verification-note">Runtime integrity report unavailable.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Integrity</span>
+        <span class="verification-value">${escapeHtml(report.status)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Shards</span>
+        <span class="verification-value">${escapeHtml(metrics.runtimeScenarioShardCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Journal entries</span>
+        <span class="verification-value">${escapeHtml(metrics.journalEntries ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Orphan shards</span>
+        <span class="verification-value">${escapeHtml(metrics.orphanScenarioShardCount ?? 0)}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Checks</p>
+      <ul class="verification-list">
+        ${checks.map((item) => `<li>${escapeHtml(item.status)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No integrity check available.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Warnings</p>
+      <ul class="verification-list">
+        ${warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("") || "<li>No runtime warning reported.</li>"}
       </ul>
     </div>
   `;
@@ -1736,7 +1798,12 @@ async function refreshComplianceConfig() {
 }
 
 async function refreshSystemReport() {
-  renderSystemReport(await loadSystemReport());
+  const [systemReport, runtimeIntegrity] = await Promise.all([
+    loadSystemReport(),
+    loadRuntimeIntegrity()
+  ]);
+  renderSystemReport(systemReport);
+  renderRuntimeIntegrity(runtimeIntegrity);
 }
 
 async function refreshRuntimeSnapshots() {
@@ -1889,6 +1956,7 @@ async function handleCreateRuntimeSnapshotClick() {
   reasonInput.value = "";
   renderRuntimeSnapshots({ snapshots: response.snapshots || [] });
   renderSystemReport(response.systemReport);
+  await refreshSystemReport();
 }
 
 async function handleRestoreRuntimeSnapshotClick() {
@@ -1903,6 +1971,7 @@ async function handleRestoreRuntimeSnapshotClick() {
   renderSupportBundleStatus(response);
   renderRuntimeSnapshots({ snapshots: response.runtimeSnapshots || [] });
   renderSystemReport(response.systemReport);
+  renderRuntimeIntegrity(response.runtimeIntegrityReport || null);
   await renderScenario(appState.catalog, appState.scenarioId);
 }
 
@@ -1920,8 +1989,35 @@ async function handleSupportBundleRestoreClick() {
   renderSupportBundleStatus(response);
   renderRuntimeSnapshots({ snapshots: response.runtimeSnapshots || [] });
   renderSystemReport(response.systemReport);
+  renderRuntimeIntegrity(response.runtimeIntegrityReport || null);
   fileInput.value = "";
   await renderScenario(appState.catalog, appState.scenarioId);
+}
+
+async function handleRunRuntimeMaintenanceClick() {
+  const response = await runRuntimeMaintenanceRequest();
+  renderRuntimeSnapshots({ snapshots: response.runtimeSnapshots || [] });
+  renderSupportBundleStatus({
+    restoreReport: {
+      sourceLabel: "runtime-maintenance",
+      backupDir: response.snapshot?.path || "unavailable",
+      reportPath: response.maintenance?.reportPath || "unavailable",
+      restoredSections: {
+        runtimeState: true,
+        gdprConfig: false,
+        aiPolicy: false,
+        aiProviderConfig: false,
+        hubspotConfig: false
+      },
+      notes: [
+        `Snapshot created before maintenance: ${response.snapshot?.snapshotId || "none"}.`,
+        `Journal compacted to ${response.maintenance?.journalEntriesAfterCompaction ?? 0} entry.`,
+        `Runtime integrity status after maintenance: ${response.integrityReport?.status || "unknown"}.`
+      ]
+    }
+  });
+  renderSystemReport(response.systemReport);
+  renderRuntimeIntegrity(response.integrityReport || null);
 }
 
 function renderSupportBundleError(error) {
@@ -1938,6 +2034,13 @@ function renderRuntimeSnapshotError(error) {
   `;
 }
 
+function renderRuntimeIntegrityError(error) {
+  const container = document.getElementById("runtime-integrity-status");
+  container.innerHTML = `
+    <p class="verification-note">Runtime maintenance failed: ${escapeHtml(error.message)}</p>
+  `;
+}
+
 function renderSupportBundleStatus(payload) {
   const container = document.getElementById("support-bundle-status");
   if (!payload) {
@@ -1948,6 +2051,19 @@ function renderSupportBundleStatus(payload) {
   }
 
   const restoredSections = payload.restoreReport?.restoredSections || {};
+  if (payload.restoreReport?.sourceLabel === "runtime-maintenance") {
+    container.innerHTML = `
+      <div class="verification-block">
+        <p class="score-label">Runtime maintenance</p>
+        <p class="verification-note">Maintenance report: ${escapeHtml(payload.restoreReport?.reportPath || "unavailable")}</p>
+        <ul class="verification-list">
+          ${(payload.restoreReport?.notes || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+    return;
+  }
+
   container.innerHTML = `
     <div class="verification-block">
       <p class="score-label">Support restore</p>
@@ -2432,6 +2548,7 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
   const restoreSupportBundleButton = document.getElementById("restore-support-bundle-button");
   const createRuntimeSnapshotButton = document.getElementById("create-runtime-snapshot-button");
   const restoreRuntimeSnapshotButton = document.getElementById("restore-runtime-snapshot-button");
+  const runRuntimeMaintenanceButton = document.getElementById("run-runtime-maintenance-button");
   const exportJsonButton = document.getElementById("export-feedback-json-button");
   const exportCsvButton = document.getElementById("export-feedback-csv-button");
   const reloadComplianceConfigButton = document.getElementById("reload-compliance-config-button");
@@ -2484,6 +2601,13 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
       await handleRestoreRuntimeSnapshotClick();
     } catch (error) {
       renderRuntimeSnapshotError(error);
+    }
+  });
+  runRuntimeMaintenanceButton.addEventListener("click", async () => {
+    try {
+      await handleRunRuntimeMaintenanceClick();
+    } catch (error) {
+      renderRuntimeIntegrityError(error);
     }
   });
   restoreSupportBundleButton.addEventListener("click", async () => {

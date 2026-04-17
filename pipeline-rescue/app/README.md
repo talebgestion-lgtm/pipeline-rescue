@@ -133,6 +133,8 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/runtime/snapshots`
 - `POST /api/runtime/snapshots`
 - `POST /api/runtime/snapshots/:snapshotId/restore`
+- `/api/runtime/integrity`
+- `POST /api/runtime/maintenance/compact`
 - `/health/live`
 - `/health/ready`
 
@@ -181,6 +183,7 @@ The UI now supports:
 - a downloadable support bundle that captures runtime state, system diagnostics, configs, and sanitized HubSpot install metadata
 - a controlled support-bundle restore flow with runtime backup before import
 - a runtime snapshot catalog with manual capture and rollback
+- a runtime integrity audit and one-click maintenance compaction path
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt
@@ -197,6 +200,11 @@ The pilot runtime now persists local state in:
 - `data/runtime-state.json`
 - `data/scenario-state/*.json`
 - `data/runtime-journal.jsonl`
+
+Maintenance endpoints:
+
+- `GET /api/runtime/integrity`
+- `POST /api/runtime/maintenance/compact`
 
 If `PIPELINE_RESCUE_RUNTIME_DIR` is set, mutable files are written there instead of `app/data`.
 
