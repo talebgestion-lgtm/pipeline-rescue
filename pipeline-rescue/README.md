@@ -135,3 +135,4 @@ It now has:
 - append-only runtime journal replay so a pilot instance can recover from a stale or broken primary state file
 - publishable static pilot site with overview, pilot, privacy, and terms pages
 - static site link validation in the GitHub Pages publishing workflow
+- pilot launch plan API and UI that converts readiness gates into a concrete action queue

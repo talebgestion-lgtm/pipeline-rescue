@@ -148,6 +148,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/runtime/integrity`
 - `POST /api/runtime/maintenance/compact`
 - `/api/deployment/profile`
+- `/api/pilot/launch-plan`
 - `/health/live`
 - `/health/ready`
 
@@ -198,6 +199,7 @@ The UI now supports:
 - a runtime snapshot catalog with manual capture and rollback
 - a runtime integrity audit and one-click maintenance compaction path
 - a deployment profile that distinguishes blocked, hardening-needed, and pilot-ready states
+- a pilot launch plan that converts technical and commercial gates into an actionable launch queue
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt

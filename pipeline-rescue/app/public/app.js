@@ -233,6 +233,10 @@ async function loadDeploymentProfile() {
   return fetchJson("/api/deployment/profile");
 }
 
+async function loadPilotLaunchPlan() {
+  return fetchJson("/api/pilot/launch-plan");
+}
+
 async function loadRuntimeIntegrity() {
   return fetchJson("/api/runtime/integrity");
 }
@@ -947,6 +951,65 @@ function renderDeploymentProfile(report) {
       <p class="score-label">Checks</p>
       <ul class="verification-list">
         ${checks.map((item) => `<li>${escapeHtml(item.status)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No deployment check available.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
+function renderPilotLaunchPlan(plan) {
+  const container = document.getElementById("pilot-launch-plan");
+  const actions = Array.isArray(plan && plan.actions) ? plan.actions : [];
+  const manualGates = Array.isArray(plan && plan.manualCommercialGates) ? plan.manualCommercialGates : [];
+
+  if (!plan) {
+    container.innerHTML = `
+      <p class="verification-note">Pilot launch plan unavailable.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Pilot launch</span>
+        <span class="verification-value">${escapeHtml(plan.status)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Technical readiness</span>
+        <span class="verification-value">${escapeHtml(plan.metrics?.technicalReadinessPercent ?? 0)}%</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Blockers</span>
+        <span class="verification-value">${escapeHtml(plan.metrics?.blockedCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Manual gates</span>
+        <span class="verification-value">${escapeHtml(plan.metrics?.manualGateCount ?? 0)}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${escapeHtml(plan.summary || "No launch summary available.")}</p>
+      <p class="verification-note">Next milestone: ${escapeHtml(plan.nextMilestone || "No milestone available.")}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Next action</p>
+      <p class="verification-note">
+        ${plan.nextAction
+          ? `${escapeHtml(plan.nextAction.priority)} | ${escapeHtml(plan.nextAction.status)} | ${escapeHtml(plan.nextAction.label)}: ${escapeHtml(plan.nextAction.remediation)}`
+          : "No remaining action reported."}
+      </p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Action queue</p>
+      <ul class="verification-list">
+        ${actions.slice(0, 8).map((item) => `<li>${escapeHtml(item.priority)} | ${escapeHtml(item.status)} | ${escapeHtml(item.label)}: ${escapeHtml(item.remediation)}</li>`).join("") || "<li>No launch action available.</li>"}
+      </ul>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Manual commercial gates</p>
+      <ul class="verification-list">
+        ${manualGates.map((item) => `<li>${escapeHtml(item.priority)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No manual gate reported.</li>"}
       </ul>
     </div>
   `;
@@ -1896,14 +1959,16 @@ async function refreshComplianceConfig() {
 }
 
 async function refreshSystemReport() {
-  const [systemReport, runtimeIntegrity, deploymentProfile] = await Promise.all([
+  const [systemReport, runtimeIntegrity, deploymentProfile, pilotLaunchPlan] = await Promise.all([
     loadSystemReport(),
     loadRuntimeIntegrity(),
-    loadDeploymentProfile()
+    loadDeploymentProfile(),
+    loadPilotLaunchPlan()
   ]);
   renderSystemReport(systemReport);
   renderRuntimeIntegrity(runtimeIntegrity);
   renderDeploymentProfile(deploymentProfile);
+  renderPilotLaunchPlan(pilotLaunchPlan);
 }
 
 async function refreshRuntimeSnapshots() {

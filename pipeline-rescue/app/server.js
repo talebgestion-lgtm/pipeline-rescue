@@ -7,6 +7,7 @@ const { createRuntime } = require("./lib/pilot-runtime");
 const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
 const { createDeploymentProfile } = require("./lib/deployment-profile");
+const { createPilotLaunchPlan } = require("./lib/pilot-launch-plan");
 const {
   createAccessStatus,
   ensureAccess,
@@ -672,6 +673,11 @@ function buildSystemState(appState) {
     hubspotState,
     aiProviderState
   });
+  const pilotLaunchPlan = createPilotLaunchPlan({
+    deploymentProfile,
+    systemReport,
+    runtimeIntegrityReport
+  });
 
   return {
     gdprState,
@@ -683,6 +689,7 @@ function buildSystemState(appState) {
     runtimeSnapshots,
     runtimeIntegrityReport,
     deploymentProfile,
+    pilotLaunchPlan,
     systemReport
   };
 }
@@ -822,6 +829,7 @@ const server = http.createServer(async (request, response) => {
       runtimeSnapshots,
       runtimeIntegrityReport,
       deploymentProfile,
+      pilotLaunchPlan,
       systemReport
     } = buildSystemState(appState);
     const scenarioId = url.searchParams.get("scenario")
@@ -872,6 +880,11 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/deployment/profile") {
       sendJson(response, 200, deploymentProfile);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/pilot/launch-plan") {
+      sendJson(response, 200, pilotLaunchPlan);
       return;
     }
 
