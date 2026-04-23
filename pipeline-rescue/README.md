@@ -46,6 +46,7 @@ Supporting specs:
 - `docs/apocalypse-audit.md`
 - `docs/hubspot-surface-spec.md`
 - `docs/icp.md`
+- `docs/commercialization-kit.md`
 - `docs/pilot-instrumentation.md`
 - `docs/technical-architecture.md`
 - `docs/gdpr-strict-mode.md`
@@ -60,11 +61,14 @@ Supporting specs:
 
 ## Commercial model
 
+- Pilot: EUR500 setup + EUR299 for the first 30 days
 - Starter: EUR99/month
 - Pro: EUR299/month
 - Team: EUR799/month
 
 Pricing should be per HubSpot portal with clear usage caps.
+
+The first sales motion should use the controlled pilot offer in `docs/commercialization-kit.md`.
 
 ## Current stage
 
