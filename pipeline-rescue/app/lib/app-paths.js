@@ -43,6 +43,8 @@ function resolveAppPaths(options = {}) {
     aiProviderConfigPath: path.join(runtimeDir, "ai-provider-config.json"),
     hubspotConfigDefaultPath: path.join(bundledDataDir, "hubspot-config.json"),
     hubspotConfigPath: path.join(runtimeDir, "hubspot-config.json"),
+    pilotConfigDefaultPath: path.join(bundledDataDir, "pilot-config.json"),
+    pilotConfigPath: path.join(runtimeDir, "pilot-config.json"),
     hubspotInstallStatePath: path.join(runtimeDir, "hubspot-install-state.json"),
     runtimeStatePath: path.join(runtimeDir, "runtime-state.json"),
     packagePath: path.join(appRoot, "package.json"),
@@ -79,6 +81,11 @@ function listRuntimeSeedFiles(appPaths) {
       label: "HubSpot config",
       sourcePath: appPaths.hubspotConfigDefaultPath,
       targetPath: appPaths.hubspotConfigPath
+    },
+    {
+      label: "Pilot config",
+      sourcePath: appPaths.pilotConfigDefaultPath,
+      targetPath: appPaths.pilotConfigPath
     }
   ];
 }

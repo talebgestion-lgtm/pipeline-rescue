@@ -136,3 +136,4 @@ It now has:
 - publishable static pilot site with overview, pilot, privacy, and terms pages
 - static site link validation in the GitHub Pages publishing workflow
 - pilot launch plan API and UI that converts readiness gates into a concrete action queue
+- persisted pilot commercial configuration for provider identity, customer scope, billing method, and launch approvals

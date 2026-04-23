@@ -25,6 +25,7 @@ function buildSupportBundle(options = {}) {
   const aiPolicyState = options.aiPolicyState || {};
   const aiProviderState = options.aiProviderState || {};
   const hubspotState = options.hubspotState || {};
+  const pilotConfigState = options.pilotConfigState || {};
 
   return {
     bundleVersion: 1,
@@ -65,6 +66,11 @@ function buildSupportBundle(options = {}) {
       config: hubspotState.hubspotConfig || null,
       status: hubspotState.hubspotStatus || null,
       installState: sanitizeHubSpotInstallState(hubspotState.installState)
+    },
+    pilot: {
+      error: pilotConfigState.error || null,
+      config: pilotConfigState.pilotConfig || null,
+      readiness: pilotConfigState.readiness || null
     }
   };
 }

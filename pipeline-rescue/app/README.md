@@ -148,6 +148,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `/api/runtime/integrity`
 - `POST /api/runtime/maintenance/compact`
 - `/api/deployment/profile`
+- `/api/pilot/config`
 - `/api/pilot/launch-plan`
 - `/health/live`
 - `/health/ready`
@@ -200,6 +201,7 @@ The UI now supports:
 - a runtime integrity audit and one-click maintenance compaction path
 - a deployment profile that distinguishes blocked, hardening-needed, and pilot-ready states
 - a pilot launch plan that converts technical and commercial gates into an actionable launch queue
+- a local pilot commercial config for provider identity, customer scope, billing route, and launch approvals
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt
@@ -235,6 +237,7 @@ The bootstrap script seeds missing runtime files:
 - `ai-provider-config.json`
 - `hubspot-config.json`
 - `hubspot-install-state.json`
+- `pilot-config.json`
 - `bootstrap-report.json`
 
 The state index and scenario shards store:
@@ -301,6 +304,12 @@ HubSpot endpoints:
 - `POST /api/hubspot/live/deals/:dealId/tasks?portalId=...`
 - `POST /api/hubspot/live/deals/:dealId/draft?portalId=...`
 - `POST /api/hubspot/live/deals/:dealId/notes?portalId=...`
+
+Pilot launch endpoints:
+
+- `GET /api/pilot/config`
+- `POST /api/pilot/config`
+- `GET /api/pilot/launch-plan`
 
 Compliance endpoint:
 

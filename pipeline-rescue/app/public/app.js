@@ -237,6 +237,18 @@ async function loadPilotLaunchPlan() {
   return fetchJson("/api/pilot/launch-plan");
 }
 
+async function loadPilotConfig() {
+  return fetchJson("/api/pilot/config");
+}
+
+async function savePilotConfig(config) {
+  return fetchJson("/api/pilot/config", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config)
+  });
+}
+
 async function loadRuntimeIntegrity() {
   return fetchJson("/api/runtime/integrity");
 }
@@ -1012,6 +1024,81 @@ function renderPilotLaunchPlan(plan) {
         ${manualGates.map((item) => `<li>${escapeHtml(item.priority)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No manual gate reported.</li>"}
       </ul>
     </div>
+  `;
+}
+
+function renderPilotConfigForm(payload) {
+  const container = document.getElementById("pilot-config-form");
+  const config = payload && payload.config ? payload.config : {};
+  const readiness = payload && payload.readiness ? payload.readiness : {};
+  const provider = config.provider || {};
+  const customer = config.customer || {};
+  const scope = config.scope || {};
+  const billing = config.billing || {};
+  const approvals = config.approvals || {};
+  const gates = Array.isArray(readiness.gates) ? readiness.gates : [];
+
+  container.innerHTML = `
+    <div class="verification-block">
+      <p class="score-label">Pilot commercial config</p>
+      <p class="verification-note">Status: ${escapeHtml(readiness.status || "unknown")} | Completed gates: ${escapeHtml(readiness.metrics?.completedGateCount ?? 0)}/${escapeHtml(readiness.metrics?.totalGateCount ?? 0)}</p>
+      <ul class="verification-list">
+        ${gates.map((item) => `<li>${escapeHtml(item.status)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No commercial gate loaded.</li>"}
+      </ul>
+    </div>
+    <label class="score-label" for="pilot-provider-legal-name-input">Provider legal name</label>
+    <input id="pilot-provider-legal-name-input" class="scenario-select" value="${escapeHtml(provider.legalName || "")}">
+    <label class="score-label" for="pilot-provider-trading-name-input">Provider trading name</label>
+    <input id="pilot-provider-trading-name-input" class="scenario-select" value="${escapeHtml(provider.tradingName || "")}">
+    <label class="score-label" for="pilot-provider-country-input">Provider country</label>
+    <input id="pilot-provider-country-input" class="scenario-select" value="${escapeHtml(provider.country || "")}">
+    <label class="score-label" for="pilot-provider-support-email-input">Support email</label>
+    <input id="pilot-provider-support-email-input" class="scenario-select" type="email" value="${escapeHtml(provider.supportEmail || "")}">
+
+    <label class="score-label" for="pilot-customer-name-input">Customer name</label>
+    <input id="pilot-customer-name-input" class="scenario-select" value="${escapeHtml(customer.name || "")}">
+    <label class="score-label" for="pilot-customer-email-input">Customer contact email</label>
+    <input id="pilot-customer-email-input" class="scenario-select" type="email" value="${escapeHtml(customer.contactEmail || "")}">
+    <label class="score-label" for="pilot-customer-country-input">Customer country</label>
+    <input id="pilot-customer-country-input" class="scenario-select" value="${escapeHtml(customer.country || "")}">
+
+    <label class="score-label" for="pilot-hubspot-portal-input">HubSpot portal ID</label>
+    <input id="pilot-hubspot-portal-input" class="scenario-select" value="${escapeHtml(scope.hubspotPortalId || "")}">
+    <label class="score-label" for="pilot-hubspot-pipeline-input">HubSpot pipeline ID</label>
+    <input id="pilot-hubspot-pipeline-input" class="scenario-select" value="${escapeHtml(scope.hubspotPipelineId || "")}">
+    <label class="score-label" for="pilot-access-route-input">Access route</label>
+    <select id="pilot-access-route-input" class="scenario-select">
+      <option value="UNDECIDED" ${scope.accessRoute === "UNDECIDED" ? "selected" : ""}>Undecided</option>
+      <option value="PRIVATE_APP" ${scope.accessRoute === "PRIVATE_APP" ? "selected" : ""}>HubSpot Private App</option>
+      <option value="OAUTH" ${scope.accessRoute === "OAUTH" ? "selected" : ""}>HubSpot OAuth</option>
+    </select>
+    <label class="score-label" for="pilot-start-date-input">Pilot start date</label>
+    <input id="pilot-start-date-input" class="scenario-select" type="date" value="${escapeHtml(scope.pilotStartDate || "")}">
+    <label class="score-label" for="pilot-duration-input">Pilot duration days</label>
+    <input id="pilot-duration-input" class="scenario-select" type="number" min="1" max="120" value="${escapeHtml(scope.pilotDurationDays || 30)}">
+    <label class="score-label" for="pilot-max-users-input">Max pilot users</label>
+    <input id="pilot-max-users-input" class="scenario-select" type="number" min="1" max="30" value="${escapeHtml(scope.maxUsers || 5)}">
+
+    <label class="score-label" for="pilot-billing-method-input">Billing method</label>
+    <select id="pilot-billing-method-input" class="scenario-select">
+      <option value="UNDECIDED" ${billing.method === "UNDECIDED" ? "selected" : ""}>Undecided</option>
+      <option value="INVOICE" ${billing.method === "INVOICE" ? "selected" : ""}>Invoice</option>
+      <option value="PAYMENT_LINK" ${billing.method === "PAYMENT_LINK" ? "selected" : ""}>Payment link</option>
+      <option value="BANK_TRANSFER" ${billing.method === "BANK_TRANSFER" ? "selected" : ""}>Bank transfer</option>
+    </select>
+    <label class="score-label" for="pilot-setup-fee-input">Setup fee EUR</label>
+    <input id="pilot-setup-fee-input" class="scenario-select" type="number" min="0" value="${escapeHtml(billing.setupFeeEur ?? 500)}">
+    <label class="score-label" for="pilot-fee-input">Pilot fee EUR</label>
+    <input id="pilot-fee-input" class="scenario-select" type="number" min="0" value="${escapeHtml(billing.pilotFeeEur ?? 299)}">
+    <label class="score-label" for="pilot-monthly-fee-input">Continuation monthly fee EUR</label>
+    <input id="pilot-monthly-fee-input" class="scenario-select" type="number" min="0" value="${escapeHtml(billing.continuationMonthlyFeeEur ?? 299)}">
+    <label class="score-label" for="pilot-invoice-reference-input">Invoice reference</label>
+    <input id="pilot-invoice-reference-input" class="scenario-select" value="${escapeHtml(billing.invoiceReference || "")}">
+
+    <label class="verification-note"><input type="checkbox" id="pilot-terms-reviewed-input" ${approvals.pilotTermsReviewed ? "checked" : ""}> Pilot terms reviewed</label>
+    <label class="verification-note"><input type="checkbox" id="pilot-privacy-reviewed-input" ${approvals.privacyNoticeReviewed ? "checked" : ""}> Privacy notice reviewed</label>
+    <label class="verification-note"><input type="checkbox" id="pilot-human-review-input" ${approvals.humanReviewAccepted ? "checked" : ""}> Human review accepted</label>
+    <label class="verification-note"><input type="checkbox" id="pilot-no-sensitive-data-input" ${approvals.noSensitiveDataAccepted ? "checked" : ""}> Sensitive-data exclusion accepted</label>
   `;
 }
 
@@ -1958,6 +2045,10 @@ async function refreshComplianceConfig() {
   renderComplianceGuidedForm(config);
 }
 
+async function refreshPilotConfig() {
+  renderPilotConfigForm(await loadPilotConfig());
+}
+
 async function refreshSystemReport() {
   const [systemReport, runtimeIntegrity, deploymentProfile, pilotLaunchPlan] = await Promise.all([
     loadSystemReport(),
@@ -1969,6 +2060,55 @@ async function refreshSystemReport() {
   renderRuntimeIntegrity(runtimeIntegrity);
   renderDeploymentProfile(deploymentProfile);
   renderPilotLaunchPlan(pilotLaunchPlan);
+}
+
+function readValue(id) {
+  return document.getElementById(id).value.trim();
+}
+
+function readNumber(id) {
+  return Number(document.getElementById(id).value);
+}
+
+function readChecked(id) {
+  return document.getElementById(id).checked;
+}
+
+function collectPilotConfigForm() {
+  return {
+    provider: {
+      legalName: readValue("pilot-provider-legal-name-input"),
+      tradingName: readValue("pilot-provider-trading-name-input"),
+      country: readValue("pilot-provider-country-input"),
+      supportEmail: readValue("pilot-provider-support-email-input")
+    },
+    customer: {
+      name: readValue("pilot-customer-name-input"),
+      contactEmail: readValue("pilot-customer-email-input"),
+      country: readValue("pilot-customer-country-input")
+    },
+    scope: {
+      hubspotPortalId: readValue("pilot-hubspot-portal-input"),
+      hubspotPipelineId: readValue("pilot-hubspot-pipeline-input"),
+      accessRoute: readValue("pilot-access-route-input"),
+      pilotStartDate: readValue("pilot-start-date-input"),
+      pilotDurationDays: readNumber("pilot-duration-input"),
+      maxUsers: readNumber("pilot-max-users-input")
+    },
+    billing: {
+      method: readValue("pilot-billing-method-input"),
+      setupFeeEur: readNumber("pilot-setup-fee-input"),
+      pilotFeeEur: readNumber("pilot-fee-input"),
+      continuationMonthlyFeeEur: readNumber("pilot-monthly-fee-input"),
+      invoiceReference: readValue("pilot-invoice-reference-input")
+    },
+    approvals: {
+      pilotTermsReviewed: readChecked("pilot-terms-reviewed-input"),
+      privacyNoticeReviewed: readChecked("pilot-privacy-reviewed-input"),
+      humanReviewAccepted: readChecked("pilot-human-review-input"),
+      noSensitiveDataAccepted: readChecked("pilot-no-sensitive-data-input")
+    }
+  };
 }
 
 async function refreshRuntimeSnapshots() {
@@ -2025,6 +2165,7 @@ async function renderScenario(catalog, scenarioId) {
   await refreshHubSpot();
   await refreshComplianceReport();
   await refreshComplianceConfig();
+  await refreshPilotConfig();
   await refreshSystemReport();
 }
 
@@ -2241,6 +2382,7 @@ function renderSupportBundleStatus(payload) {
         <li>AI policy: ${restoredSections.aiPolicy ? "restored" : "skipped"}</li>
         <li>AI provider config: ${restoredSections.aiProviderConfig ? "restored" : "skipped"}</li>
         <li>HubSpot config: ${restoredSections.hubspotConfig ? "restored" : "skipped"}</li>
+        <li>Pilot config: ${restoredSections.pilotConfig ? "restored" : "skipped"}</li>
         <li>HubSpot install state: intentionally skipped</li>
       </ul>
       <ul class="verification-list">
@@ -2266,6 +2408,7 @@ async function handleResetClick() {
   await refreshAiPolicy();
   await refreshComplianceReport();
   await refreshComplianceConfig();
+  await refreshPilotConfig();
   await refreshSystemReport();
 }
 
@@ -2353,6 +2496,32 @@ async function handleSaveHubSpotConfigClick() {
       title: "HubSpot config save failed",
       message: error.message
     });
+  }
+}
+
+async function handleReloadPilotConfigClick() {
+  try {
+    await refreshPilotConfig();
+    await refreshSystemReport();
+  } catch (error) {
+    document.getElementById("pilot-config-form").innerHTML = `
+      <p class="verification-note">Pilot config reload failed: ${escapeHtml(error.message)}</p>
+    `;
+  }
+}
+
+async function handleSavePilotConfigClick() {
+  try {
+    const response = await savePilotConfig(collectPilotConfigForm());
+    renderPilotConfigForm({
+      config: response.config,
+      readiness: response.readiness
+    });
+    renderPilotLaunchPlan(response.launchPlan);
+  } catch (error) {
+    document.getElementById("pilot-config-form").innerHTML = `
+      <p class="verification-note">Pilot config save failed: ${escapeHtml(error.message)}</p>
+    `;
   }
 }
 
@@ -2729,6 +2898,8 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
   const hubSpotInstallUrlButton = document.getElementById("hubspot-install-url-button");
   const reloadHubSpotConfigButton = document.getElementById("reload-hubspot-config-button");
   const saveHubSpotConfigButton = document.getElementById("save-hubspot-config-button");
+  const reloadPilotConfigButton = document.getElementById("reload-pilot-config-button");
+  const savePilotConfigButton = document.getElementById("save-pilot-config-button");
   const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
   const hubSpotLivePreviewButton = document.getElementById("hubspot-live-preview-button");
   const hubSpotLiveTaskButton = document.getElementById("hubspot-live-task-button");
@@ -2804,6 +2975,8 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
   hubSpotInstallUrlButton.addEventListener("click", handleHubSpotInstallUrlClick);
   reloadHubSpotConfigButton.addEventListener("click", handleReloadHubSpotConfigClick);
   saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
+  reloadPilotConfigButton.addEventListener("click", handleReloadPilotConfigClick);
+  savePilotConfigButton.addEventListener("click", handleSavePilotConfigClick);
   exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
   hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
   hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);

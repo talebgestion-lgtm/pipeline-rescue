@@ -1,0 +1,34 @@
+{
+  "provider": {
+    "legalName": "",
+    "tradingName": "",
+    "country": "",
+    "supportEmail": ""
+  },
+  "customer": {
+    "name": "",
+    "contactEmail": "",
+    "country": ""
+  },
+  "scope": {
+    "hubspotPortalId": "",
+    "hubspotPipelineId": "",
+    "accessRoute": "UNDECIDED",
+    "pilotStartDate": "",
+    "pilotDurationDays": 30,
+    "maxUsers": 5
+  },
+  "billing": {
+    "method": "UNDECIDED",
+    "setupFeeEur": 500,
+    "pilotFeeEur": 299,
+    "continuationMonthlyFeeEur": 299,
+    "invoiceReference": ""
+  },
+  "approvals": {
+    "pilotTermsReviewed": false,
+    "privacyNoticeReviewed": false,
+    "humanReviewAccepted": false,
+    "noSensitiveDataAccepted": false
+  }
+}

@@ -63,6 +63,7 @@ function createRuntimeSnapshot(options = {}) {
   const aiPolicyState = options.aiPolicyState || {};
   const aiProviderState = options.aiProviderState || {};
   const hubspotState = options.hubspotState || {};
+  const pilotConfigState = options.pilotConfigState || {};
   const reason = options.reason || "Manual snapshot";
 
   const bundle = buildSupportBundle({
@@ -74,7 +75,8 @@ function createRuntimeSnapshot(options = {}) {
     gdprState,
     aiPolicyState,
     aiProviderState,
-    hubspotState
+    hubspotState,
+    pilotConfigState
   });
 
   const snapshotId = createSnapshotId();

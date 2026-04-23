@@ -33,6 +33,22 @@ const MANUAL_COMMERCIAL_GATES = [
   }
 ];
 
+function createPilotConfigAction(pilotConfigState) {
+  if (!pilotConfigState || !pilotConfigState.error) {
+    return null;
+  }
+
+  return {
+    code: "pilot_config_invalid",
+    label: "Pilot commercial config",
+    owner: "operator",
+    priority: "P0",
+    status: "BLOCKED",
+    detail: pilotConfigState.error,
+    remediation: "Fix the local pilot config JSON before customer launch."
+  };
+}
+
 function mapCheckAction(check) {
   const status = check.status === "PASS"
     ? "DONE"
@@ -170,10 +186,29 @@ function sortActions(actions) {
   });
 }
 
+function createManualCommercialActions(pilotConfigState) {
+  const readinessGates = pilotConfigState && pilotConfigState.readiness && Array.isArray(pilotConfigState.readiness.gates)
+    ? pilotConfigState.readiness.gates
+    : [];
+
+  return MANUAL_COMMERCIAL_GATES.map((item) => {
+    const gate = readinessGates.find((candidate) => candidate.code === item.code);
+    const done = gate && gate.status === "DONE";
+
+    return {
+      ...item,
+      status: done ? "DONE" : "MANUAL_REQUIRED",
+      detail: gate ? gate.detail : item.detail,
+      remediation: done ? "No action required." : (gate ? gate.remediation : item.remediation)
+    };
+  });
+}
+
 function createPilotLaunchPlan(options = {}) {
   const deploymentProfile = options.deploymentProfile || null;
   const systemReport = options.systemReport || null;
   const runtimeIntegrityReport = options.runtimeIntegrityReport || null;
+  const pilotConfigState = options.pilotConfigState || null;
 
   const deploymentActions = deploymentProfile && Array.isArray(deploymentProfile.checks)
     ? deploymentProfile.checks.map(mapCheckAction)
@@ -193,10 +228,12 @@ function createPilotLaunchPlan(options = {}) {
     ...createRuntimeIntegrityActions(runtimeIntegrityReport),
     ...deploymentActions
   ];
-  const manualActions = MANUAL_COMMERCIAL_GATES.map((item) => ({
-    ...item,
-    status: "MANUAL_REQUIRED"
-  }));
+  const pilotConfigAction = createPilotConfigAction(pilotConfigState);
+  if (pilotConfigAction) {
+    technicalActions.push(pilotConfigAction);
+  }
+
+  const manualActions = createManualCommercialActions(pilotConfigState);
   const allActions = [...technicalActions, ...manualActions];
   const sortedActions = sortActions(allActions);
   const blockedCount = allActions.filter((item) => item.status === "BLOCKED").length;
@@ -207,18 +244,24 @@ function createPilotLaunchPlan(options = {}) {
     ? "BLOCKED_BY_TECHNICAL_GATES"
     : hardeningCount > 0
       ? "READY_FOR_INTERNAL_DRY_RUN"
-      : "READY_FOR_SIGNED_PILOT";
+      : manualCount > 0
+        ? "READY_FOR_SIGNED_PILOT"
+        : "READY_FOR_CUSTOMER_LAUNCH";
   const nextAction = sortedActions.find((item) => item.status !== "DONE") || null;
 
   return {
     status,
     generatedAt: new Date().toISOString(),
-    summary: status === "READY_FOR_SIGNED_PILOT"
+    summary: status === "READY_FOR_CUSTOMER_LAUNCH"
+      ? "Technical and commercial gates are complete. The pilot can be launched with the configured customer scope."
+      : status === "READY_FOR_SIGNED_PILOT"
       ? "Technical launch gates are clear. Complete manual commercial gates before paid customer use."
       : status === "READY_FOR_INTERNAL_DRY_RUN"
         ? "No technical blocker remains, but hardening gaps should be closed before a paid pilot."
         : "Pilot launch is blocked by mandatory technical gates.",
-    nextMilestone: status === "READY_FOR_SIGNED_PILOT"
+    nextMilestone: status === "READY_FOR_CUSTOMER_LAUNCH"
+      ? "Start the 30-day pilot, monitor adoption, and export a support bundle after setup."
+      : status === "READY_FOR_SIGNED_PILOT"
       ? "Prepare signed pilot package and first customer onboarding."
       : status === "READY_FOR_INTERNAL_DRY_RUN"
         ? "Run an internal dry run, close hardening items, then repeat readiness checks."

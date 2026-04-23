@@ -18,6 +18,7 @@ test("bootstrapRuntime seeds runtime config files and writes a report", () => {
     assert.equal(fs.existsSync(path.join(runtimeDir, "ai-policy.json")), true);
     assert.equal(fs.existsSync(path.join(runtimeDir, "ai-provider-config.json")), true);
     assert.equal(fs.existsSync(path.join(runtimeDir, "hubspot-config.json")), true);
+    assert.equal(fs.existsSync(path.join(runtimeDir, "pilot-config.json")), true);
     assert.equal(fs.existsSync(path.join(runtimeDir, "hubspot-install-state.json")), true);
     assert.equal(fs.existsSync(path.join(runtimeDir, "bootstrap-report.json")), true);
     assert.equal(
@@ -26,7 +27,7 @@ test("bootstrapRuntime seeds runtime config files and writes a report", () => {
     );
     assert.deepEqual(
       result.report.seededFiles.map((entry) => entry.action),
-      ["seeded", "seeded", "seeded", "seeded", "seeded"]
+      ["seeded", "seeded", "seeded", "seeded", "seeded", "seeded"]
     );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -54,7 +55,7 @@ test("bootstrapRuntime preserves existing runtime files on rerun", () => {
     );
     assert.deepEqual(
       rerun.report.seededFiles.map((entry) => entry.action),
-      ["preserved", "preserved", "preserved", "preserved", "preserved"]
+      ["preserved", "preserved", "preserved", "preserved", "preserved", "preserved"]
     );
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });

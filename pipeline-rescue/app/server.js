@@ -8,6 +8,7 @@ const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
 const { createDeploymentProfile } = require("./lib/deployment-profile");
 const { createPilotLaunchPlan } = require("./lib/pilot-launch-plan");
+const { createPilotConfigReadiness, validatePilotConfigPayload } = require("./lib/pilot-config");
 const {
   createAccessStatus,
   ensureAccess,
@@ -103,6 +104,7 @@ function createRuntimeBackup() {
     { label: "AI policy", path: appPaths.aiPolicyPath },
     { label: "AI provider config", path: appPaths.aiProviderConfigPath },
     { label: "HubSpot config", path: appPaths.hubspotConfigPath },
+    { label: "Pilot config", path: appPaths.pilotConfigPath },
     { label: "HubSpot install state", path: appPaths.hubspotInstallStatePath },
     { label: "Runtime state index", path: appPaths.runtimeStatePath },
     { label: "Runtime scenario shards", path: appPaths.runtimeScenarioStateDir },
@@ -446,6 +448,10 @@ function readHubSpotConfig() {
   return validateHubSpotConfigPayload(readJsonWithFallback(appPaths.hubspotConfigPath, appPaths.hubspotConfigDefaultPath));
 }
 
+function readPilotConfig() {
+  return validatePilotConfigPayload(readJsonWithFallback(appPaths.pilotConfigPath, appPaths.pilotConfigDefaultPath));
+}
+
 function readHubSpotInstallState() {
   if (!fs.existsSync(appPaths.hubspotInstallStatePath)) {
     return createDefaultInstallState();
@@ -637,12 +643,30 @@ function getAccessState() {
   }
 }
 
+function getPilotConfigState() {
+  try {
+    const pilotConfig = readPilotConfig();
+    return {
+      pilotConfig,
+      readiness: createPilotConfigReadiness(pilotConfig),
+      error: null
+    };
+  } catch (error) {
+    return {
+      pilotConfig: null,
+      readiness: null,
+      error: error.message
+    };
+  }
+}
+
 function buildSystemState(appState) {
   const accessState = getAccessState();
   const gdprState = getGdprState();
   const aiPolicyState = getAiPolicyState();
   const aiProviderState = getAiProviderState();
   const hubspotState = getHubSpotState();
+  const pilotConfigState = getPilotConfigState();
   const runtimeBootstrapReport = readRuntimeBootstrapReport();
   const runtimeSnapshots = listRuntimeSnapshots(appPaths);
   const runtimeExport = appState.runtime ? appState.runtime.exportState() : null;
@@ -676,7 +700,8 @@ function buildSystemState(appState) {
   const pilotLaunchPlan = createPilotLaunchPlan({
     deploymentProfile,
     systemReport,
-    runtimeIntegrityReport
+    runtimeIntegrityReport,
+    pilotConfigState
   });
 
   return {
@@ -684,6 +709,7 @@ function buildSystemState(appState) {
     aiPolicyState,
     aiProviderState,
     hubspotState,
+    pilotConfigState,
     accessState,
     runtimeBootstrapReport,
     runtimeSnapshots,
@@ -707,6 +733,9 @@ function restoreSupportBundleIntoAppState(appState, bundle, sourceLabel) {
   const nextHubSpotConfig = bundle.hubspot && bundle.hubspot.config
     ? validateHubSpotConfigPayload(bundle.hubspot.config)
     : null;
+  const nextPilotConfig = bundle.pilot && bundle.pilot.config
+    ? validatePilotConfigPayload(bundle.pilot.config)
+    : null;
 
   const backup = createRuntimeBackup();
   const runtimeState = appState.runtime.restoreState(bundle.runtime.exportState);
@@ -727,6 +756,10 @@ function restoreSupportBundleIntoAppState(appState, bundle, sourceLabel) {
     saveJsonAtomic(appPaths.hubspotConfigPath, nextHubSpotConfig);
   }
 
+  if (nextPilotConfig) {
+    saveJsonAtomic(appPaths.pilotConfigPath, nextPilotConfig);
+  }
+
   const nextSystemState = buildSystemState(appState);
   const restoreReport = {
     restoredAt: new Date().toISOString(),
@@ -739,6 +772,7 @@ function restoreSupportBundleIntoAppState(appState, bundle, sourceLabel) {
       aiPolicy: Boolean(nextAiPolicy),
       aiProviderConfig: Boolean(nextAiProviderConfig),
       hubspotConfig: Boolean(nextHubSpotConfig),
+      pilotConfig: Boolean(nextPilotConfig),
       hubspotInstallState: false
     },
     notes: [
@@ -825,6 +859,7 @@ const server = http.createServer(async (request, response) => {
       aiPolicyState,
       aiProviderState,
       hubspotState,
+      pilotConfigState,
       runtimeBootstrapReport,
       runtimeSnapshots,
       runtimeIntegrityReport,
@@ -885,6 +920,36 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/pilot/launch-plan") {
       sendJson(response, 200, pilotLaunchPlan);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/pilot/config") {
+      if (pilotConfigState.error) {
+        sendJson(response, 500, {
+          error: "Pilot config unavailable",
+          detail: pilotConfigState.error
+        });
+        return;
+      }
+
+      sendJson(response, 200, {
+        config: pilotConfigState.pilotConfig,
+        readiness: pilotConfigState.readiness
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/pilot/config") {
+      const body = validatePilotConfigPayload(await readJsonBody(request));
+      saveJsonAtomic(appPaths.pilotConfigPath, body);
+      const refreshedPilotConfigState = getPilotConfigState();
+      const refreshedSystemState = buildSystemState(appState);
+
+      sendJson(response, 200, {
+        config: refreshedPilotConfigState.pilotConfig,
+        readiness: refreshedPilotConfigState.readiness,
+        launchPlan: refreshedSystemState.pilotLaunchPlan
+      });
       return;
     }
 
@@ -1794,7 +1859,8 @@ const server = http.createServer(async (request, response) => {
         gdprState,
         aiPolicyState,
         aiProviderState,
-        hubspotState
+        hubspotState,
+        pilotConfigState
       });
       sendJson(response, 200, supportBundle);
       return;
@@ -1821,6 +1887,7 @@ const server = http.createServer(async (request, response) => {
         aiPolicyState,
         aiProviderState,
         hubspotState,
+        pilotConfigState,
         reason: body.reason || "Manual snapshot from UI"
       });
       const nextSystemState = buildSystemState(appState);
@@ -1855,6 +1922,7 @@ const server = http.createServer(async (request, response) => {
         aiPolicyState,
         aiProviderState,
         hubspotState,
+        pilotConfigState,
         reason: "pre-runtime-maintenance"
       });
       const runtimeState = appState.runtime.compactStorage();

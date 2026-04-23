@@ -77,6 +77,44 @@ test("createPilotLaunchPlan reports signed-pilot readiness when technical gates 
   assert.equal(plan.nextAction.status, "MANUAL_REQUIRED");
 });
 
+test("createPilotLaunchPlan reports customer launch readiness when commercial gates pass", () => {
+  const readyPilotConfigState = {
+    readiness: {
+      gates: [
+        { code: "provider_identity", status: "DONE", detail: "Provider identity is complete." },
+        { code: "customer_scope", status: "DONE", detail: "Customer pilot scope is complete." },
+        { code: "billing_method", status: "DONE", detail: "Billing method is complete." },
+        { code: "signed_pilot_terms", status: "DONE", detail: "Signed pilot terms is complete." }
+      ]
+    }
+  };
+  const plan = createPilotLaunchPlan({
+    systemReport: {
+      readiness: true,
+      summary: "System is ready."
+    },
+    runtimeIntegrityReport: {
+      status: "READY"
+    },
+    deploymentProfile: {
+      checks: [
+        {
+          code: "access_control",
+          label: "Access protection",
+          status: "PASS",
+          detail: "Access control is enabled.",
+          remediation: "No action required."
+        }
+      ]
+    },
+    pilotConfigState: readyPilotConfigState
+  });
+
+  assert.equal(plan.status, "READY_FOR_CUSTOMER_LAUNCH");
+  assert.equal(plan.metrics.manualGateCount, 0);
+  assert.equal(plan.nextAction, null);
+});
+
 test("createPilotLaunchPlan keeps hardening gaps below paid pilot readiness", () => {
   const plan = createPilotLaunchPlan({
     systemReport: {
