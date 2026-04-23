@@ -68,6 +68,7 @@ Supporting specs:
 - `site/pilot.html`
 - `site/privacy.html`
 - `site/terms.html`
+- `site/check-site-links.js`
 
 ## Target customer
 
@@ -133,3 +134,4 @@ It now has:
 - optional shared-secret access protection so a deployed pilot instance is not left open by default
 - append-only runtime journal replay so a pilot instance can recover from a stale or broken primary state file
 - publishable static pilot site with overview, pilot, privacy, and terms pages
+- static site link validation in the GitHub Pages publishing workflow
