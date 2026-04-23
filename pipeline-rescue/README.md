@@ -64,6 +64,10 @@ Supporting specs:
 - `docs/sales-assets/outreach-target-list.md`
 - `docs/sales-assets/sales-pipeline-tracker.csv`
 - `docs/sales-assets/discovery-call-notes.md`
+- `site/index.html`
+- `site/pilot.html`
+- `site/privacy.html`
+- `site/terms.html`
 
 ## Target customer
 
@@ -128,3 +132,4 @@ It now has:
 - single-instance runtime locking so a pilot cannot corrupt the same writable runtime from two parallel processes
 - optional shared-secret access protection so a deployed pilot instance is not left open by default
 - append-only runtime journal replay so a pilot instance can recover from a stale or broken primary state file
+- publishable static pilot site with overview, pilot, privacy, and terms pages

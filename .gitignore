@@ -1,6 +1,8 @@
 *
 !.gitignore
 !README.md
+!.github/
+!.github/**
 !pipeline-rescue/
 !pipeline-rescue/**
 pipeline-rescue/app/data/runtime-state.json
