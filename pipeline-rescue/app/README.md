@@ -149,6 +149,7 @@ http://localhost:4179/?scenario=draft-blocked
 - `POST /api/runtime/maintenance/compact`
 - `/api/deployment/profile`
 - `/api/pilot/config`
+- `/api/pilot/dry-run`
 - `/api/pilot/launch-pack`
 - `/api/pilot/launch-plan`
 - `/health/live`
@@ -204,6 +205,7 @@ The UI now supports:
 - a pilot launch plan that converts technical and commercial gates into an actionable launch queue
 - a local pilot commercial config for provider identity, customer scope, billing route, and launch approvals
 - a downloadable pilot launch pack generated from the current config and readiness plan
+- a first dry-run assistant that tells the operator the next exact live HubSpot action
 - single-instance runtime locking so two processes cannot mutate the same runtime directory at once
 - optional shared-secret access protection for deployed API routes
 - append-only runtime journal replay when the main state file is missing, stale, or corrupt
@@ -311,6 +313,7 @@ Pilot launch endpoints:
 
 - `GET /api/pilot/config`
 - `POST /api/pilot/config`
+- `GET /api/pilot/dry-run`
 - `GET /api/pilot/launch-pack`
 - `GET /api/pilot/launch-plan`
 

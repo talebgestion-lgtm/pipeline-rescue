@@ -138,3 +138,4 @@ It now has:
 - pilot launch plan API and UI that converts readiness gates into a concrete action queue
 - persisted pilot commercial configuration for provider identity, customer scope, billing method, and launch approvals
 - downloadable pilot launch pack generated from the current launch readiness state
+- first dry-run assistant that turns launch readiness into the next exact operator step

@@ -237,6 +237,10 @@ async function loadPilotLaunchPlan() {
   return fetchJson("/api/pilot/launch-plan");
 }
 
+async function loadPilotDryRunAssistant() {
+  return fetchJson("/api/pilot/dry-run");
+}
+
 async function loadPilotConfig() {
   return fetchJson("/api/pilot/config");
 }
@@ -1030,6 +1034,60 @@ function renderPilotLaunchPlan(plan) {
       <p class="score-label">Manual commercial gates</p>
       <ul class="verification-list">
         ${manualGates.map((item) => `<li>${escapeHtml(item.priority)} | ${escapeHtml(item.label)}: ${escapeHtml(item.detail)}</li>`).join("") || "<li>No manual gate reported.</li>"}
+      </ul>
+    </div>
+  `;
+}
+
+function renderPilotDryRunAssistant(report) {
+  const container = document.getElementById("pilot-dry-run-assistant");
+  const steps = Array.isArray(report && report.steps) ? report.steps : [];
+
+  if (!report) {
+    container.innerHTML = `
+      <p class="verification-note">Pilot dry run assistant unavailable.</p>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="verification-grid">
+      <article class="verification-metric">
+        <span class="score-label">Dry run</span>
+        <span class="verification-value">${escapeHtml(report.status)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Blocked steps</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.blockedCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Done steps</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.doneCount ?? 0)}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Total steps</span>
+        <span class="verification-value">${escapeHtml(report.metrics?.totalStepCount ?? 0)}</span>
+      </article>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Summary</p>
+      <p class="verification-note">${escapeHtml(report.summary || "No dry run summary available.")}</p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Next exact step</p>
+      <p class="verification-note">
+        ${report.nextStep
+          ? `${escapeHtml(report.nextStep.label)}: ${escapeHtml(report.nextStep.instruction)}`
+          : "No next step reported."}
+      </p>
+      <p class="verification-note">
+        ${report.nextStep ? `Evidence: ${escapeHtml(report.nextStep.evidence || "No evidence available.")}` : ""}
+      </p>
+    </div>
+    <div class="verification-block">
+      <p class="score-label">Operator sequence</p>
+      <ul class="verification-list">
+        ${steps.map((step) => `<li>${escapeHtml(step.status)} | ${escapeHtml(step.label)}: ${escapeHtml(step.instruction)}</li>`).join("") || "<li>No dry run step reported.</li>"}
       </ul>
     </div>
   `;
@@ -2058,16 +2116,18 @@ async function refreshPilotConfig() {
 }
 
 async function refreshSystemReport() {
-  const [systemReport, runtimeIntegrity, deploymentProfile, pilotLaunchPlan] = await Promise.all([
+  const [systemReport, runtimeIntegrity, deploymentProfile, pilotLaunchPlan, pilotDryRunAssistant] = await Promise.all([
     loadSystemReport(),
     loadRuntimeIntegrity(),
     loadDeploymentProfile(),
-    loadPilotLaunchPlan()
+    loadPilotLaunchPlan(),
+    loadPilotDryRunAssistant()
   ]);
   renderSystemReport(systemReport);
   renderRuntimeIntegrity(runtimeIntegrity);
   renderDeploymentProfile(deploymentProfile);
   renderPilotLaunchPlan(pilotLaunchPlan);
+  renderPilotDryRunAssistant(pilotDryRunAssistant);
 }
 
 function readValue(id) {
