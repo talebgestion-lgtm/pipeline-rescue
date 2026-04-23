@@ -12,6 +12,7 @@ Prepare Pipeline Rescue for first public-facing commercial use without overstati
 - demo script rehearsed
 - prospecting email customized
 - pilot agreement reviewed
+- privacy notice reviewed
 - private app onboarding path tested
 - support bundle export tested
 - clear list of non-promises accepted
@@ -23,6 +24,7 @@ Prepare Pipeline Rescue for first public-facing commercial use without overstati
 - payment collection method decided
 - pilot agreement reviewed
 - basic privacy notice prepared
+- billing setup prepared
 - customer data handling process documented
 - support email ready
 

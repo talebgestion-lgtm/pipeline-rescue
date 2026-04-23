@@ -215,14 +215,16 @@ Track these during the pilot:
 - 5-slide deck outline: `docs/sales-assets/demo-deck-outline.md`
 - product walkthrough script: `docs/sales-assets/demo-script.md`
 - pilot agreement template: `docs/sales-assets/pilot-agreement-template.md`
+- privacy notice template: `docs/sales-assets/privacy-notice-template.md`
+- billing setup: `docs/sales-assets/billing-setup.md`
 - prospecting email sequence: `docs/sales-assets/prospecting-email.md`
 - onboarding email: `docs/sales-assets/onboarding-email.md`
 - public publish checklist: `docs/sales-assets/publish-checklist.md`
+- first customer runbook: `docs/sales-assets/first-customer-runbook.md`
 
 Still needed before taking paid customers:
 
 - legal review of the pilot agreement
-- basic privacy notice
 - invoicing and payment method
 - support contact email
 

@@ -56,7 +56,10 @@ Supporting specs:
 - `docs/sales-assets/prospecting-email.md`
 - `docs/sales-assets/demo-script.md`
 - `docs/sales-assets/pilot-agreement-template.md`
+- `docs/sales-assets/privacy-notice-template.md`
+- `docs/sales-assets/billing-setup.md`
 - `docs/sales-assets/onboarding-email.md`
+- `docs/sales-assets/first-customer-runbook.md`
 - `docs/sales-assets/publish-checklist.md`
 
 ## Target customer
