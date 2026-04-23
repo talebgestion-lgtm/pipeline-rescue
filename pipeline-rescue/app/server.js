@@ -8,6 +8,7 @@ const { createComplianceReport } = require("./lib/gdpr-compliance");
 const { createSystemReport } = require("./lib/system-report");
 const { createDeploymentProfile } = require("./lib/deployment-profile");
 const { createPilotLaunchPlan } = require("./lib/pilot-launch-plan");
+const { createPilotLaunchPack } = require("./lib/pilot-launch-pack");
 const { createPilotConfigReadiness, validatePilotConfigPayload } = require("./lib/pilot-config");
 const {
   createAccessStatus,
@@ -920,6 +921,17 @@ const server = http.createServer(async (request, response) => {
 
     if (request.method === "GET" && url.pathname === "/api/pilot/launch-plan") {
       sendJson(response, 200, pilotLaunchPlan);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/pilot/launch-pack") {
+      const launchPack = createPilotLaunchPack({
+        pilotConfigState,
+        pilotLaunchPlan,
+        deploymentProfile,
+        systemReport
+      });
+      sendText(response, 200, launchPack.contentType, launchPack.markdown);
       return;
     }
 

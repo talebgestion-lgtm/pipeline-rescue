@@ -292,6 +292,14 @@ async function downloadSupportBundle() {
   );
 }
 
+async function downloadPilotLaunchPack() {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  await downloadBlobFromEndpoint(
+    "/api/pilot/launch-pack",
+    `pipeline-rescue-pilot-launch-pack-${timestamp}.md`
+  );
+}
+
 async function restoreSupportBundle(payload) {
   return fetchJson("/api/runtime/support-bundle/restore", {
     method: "POST",
@@ -2256,6 +2264,10 @@ async function handleSupportBundleDownloadClick() {
   await downloadSupportBundle();
 }
 
+async function handlePilotLaunchPackDownloadClick() {
+  await downloadPilotLaunchPack();
+}
+
 async function handleCreateRuntimeSnapshotClick() {
   const reasonInput = document.getElementById("runtime-snapshot-reason");
   const response = await createRuntimeSnapshotRequest(reasonInput.value.trim() || "Manual snapshot from UI");
@@ -2900,6 +2912,7 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
   const saveHubSpotConfigButton = document.getElementById("save-hubspot-config-button");
   const reloadPilotConfigButton = document.getElementById("reload-pilot-config-button");
   const savePilotConfigButton = document.getElementById("save-pilot-config-button");
+  const downloadPilotLaunchPackButton = document.getElementById("download-pilot-launch-pack-button");
   const exchangeHubSpotCodeButton = document.getElementById("exchange-hubspot-code-button");
   const hubSpotLivePreviewButton = document.getElementById("hubspot-live-preview-button");
   const hubSpotLiveTaskButton = document.getElementById("hubspot-live-task-button");
@@ -2977,6 +2990,7 @@ async function bootProtectedApp(select, queueList, hubSpotLiveQueuePanel, initia
   saveHubSpotConfigButton.addEventListener("click", handleSaveHubSpotConfigClick);
   reloadPilotConfigButton.addEventListener("click", handleReloadPilotConfigClick);
   savePilotConfigButton.addEventListener("click", handleSavePilotConfigClick);
+  downloadPilotLaunchPackButton.addEventListener("click", handlePilotLaunchPackDownloadClick);
   exchangeHubSpotCodeButton.addEventListener("click", handleExchangeHubSpotCodeClick);
   hubSpotLivePreviewButton.addEventListener("click", handleHubSpotLivePreviewClick);
   hubSpotLiveTaskButton.addEventListener("click", handleHubSpotLiveTaskClick);
