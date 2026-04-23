@@ -221,6 +221,9 @@ Track these during the pilot:
 - onboarding email: `docs/sales-assets/onboarding-email.md`
 - public publish checklist: `docs/sales-assets/publish-checklist.md`
 - first customer runbook: `docs/sales-assets/first-customer-runbook.md`
+- outreach target list: `docs/sales-assets/outreach-target-list.md`
+- sales pipeline tracker: `docs/sales-assets/sales-pipeline-tracker.csv`
+- discovery call notes: `docs/sales-assets/discovery-call-notes.md`
 
 Still needed before taking paid customers:
 

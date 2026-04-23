@@ -61,6 +61,9 @@ Supporting specs:
 - `docs/sales-assets/onboarding-email.md`
 - `docs/sales-assets/first-customer-runbook.md`
 - `docs/sales-assets/publish-checklist.md`
+- `docs/sales-assets/outreach-target-list.md`
+- `docs/sales-assets/sales-pipeline-tracker.csv`
+- `docs/sales-assets/discovery-call-notes.md`
 
 ## Target customer
 
