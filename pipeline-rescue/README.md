@@ -51,6 +51,13 @@ Supporting specs:
 - `docs/technical-architecture.md`
 - `docs/gdpr-strict-mode.md`
 - `docs/gdpr-record-template.md`
+- `docs/sales-assets/one-page-offer.md`
+- `docs/sales-assets/demo-deck-outline.md`
+- `docs/sales-assets/prospecting-email.md`
+- `docs/sales-assets/demo-script.md`
+- `docs/sales-assets/pilot-agreement-template.md`
+- `docs/sales-assets/onboarding-email.md`
+- `docs/sales-assets/publish-checklist.md`
 
 ## Target customer
 

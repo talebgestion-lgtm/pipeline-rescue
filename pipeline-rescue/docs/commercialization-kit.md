@@ -211,12 +211,20 @@ Track these during the pilot:
 
 ## Commercial assets to prepare next
 
-- one-page PDF offer
-- 5-slide demo deck
-- short product walkthrough video
-- pilot agreement template
-- privacy notice for pilot customers
-- first customer onboarding email
+- one-page offer: `docs/sales-assets/one-page-offer.md`
+- 5-slide deck outline: `docs/sales-assets/demo-deck-outline.md`
+- product walkthrough script: `docs/sales-assets/demo-script.md`
+- pilot agreement template: `docs/sales-assets/pilot-agreement-template.md`
+- prospecting email sequence: `docs/sales-assets/prospecting-email.md`
+- onboarding email: `docs/sales-assets/onboarding-email.md`
+- public publish checklist: `docs/sales-assets/publish-checklist.md`
+
+Still needed before taking paid customers:
+
+- legal review of the pilot agreement
+- basic privacy notice
+- invoicing and payment method
+- support contact email
 
 ## Current commercial cutline
 
