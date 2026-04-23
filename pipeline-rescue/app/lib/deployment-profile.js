@@ -88,7 +88,7 @@ function createDeploymentProfile(options = {}) {
       hubspotState.hubspotStatus
         ? `HubSpot status is ${hubspotState.hubspotStatus.status}.`
         : hubspotState.error || "HubSpot status unavailable.",
-      "Complete the real HubSpot install and scopes on the pilot portal."
+      "Complete OAuth install or configure HUBSPOT_PRIVATE_APP_TOKEN for a local pilot."
     )
   );
 
@@ -147,6 +147,7 @@ function createDeploymentProfile(options = {}) {
       "PIPELINE_RESCUE_ACCESS_MODE",
       "PIPELINE_RESCUE_ACCESS_TOKEN",
       "HUBSPOT_CLIENT_SECRET",
+      "HUBSPOT_PRIVATE_APP_TOKEN",
       "OPENAI_API_KEY"
     ]
   };

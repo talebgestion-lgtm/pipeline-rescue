@@ -226,6 +226,7 @@ async function buildHubSpotLiveQueueContext({ appState, hubspotState, portalId, 
   return {
     source: {
       mode: "HUBSPOT_LIVE_QUEUE",
+      authMode: previews[0].source.authMode || "OAUTH",
       portalId: previews[0].source.portalId,
       hubDomain: previews[0].source.hubDomain || null,
       fetchedAt: analysisTimestamp,
@@ -272,6 +273,7 @@ function buildEmptyHubSpotLiveQueueResponse({ appState, source, criteria }) {
     discoveredDealIds: [],
     source: {
       mode: "HUBSPOT_LIVE_SEARCH",
+      authMode: source.authMode || "OAUTH",
       portalId: source.portalId,
       hubDomain: source.hubDomain || null,
       fetchedAt: source.fetchedAt,
@@ -315,6 +317,7 @@ async function buildHubSpotLiveSearchResponse({ appState, hubspotState, criteria
   });
 
   liveQueue.source.mode = "HUBSPOT_LIVE_SEARCH";
+  liveQueue.source.authMode = liveQueue.source.authMode || liveSearch.source.authMode || "OAUTH";
   liveQueue.source.tokenRefreshed = Boolean(liveQueue.source.tokenRefreshed || liveSearch.source.tokenRefreshed);
   liveQueue.source.portalId = liveQueue.source.portalId || liveSearch.source.portalId;
   liveQueue.source.hubDomain = liveQueue.source.hubDomain || liveSearch.source.hubDomain || null;

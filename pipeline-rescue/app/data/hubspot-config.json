@@ -1,7 +1,10 @@
 {
   "enabled": false,
+  "authMode": "OAUTH",
   "clientId": "",
   "clientSecretEnvVar": "HUBSPOT_CLIENT_SECRET",
+  "privateAppTokenEnvVar": "HUBSPOT_PRIVATE_APP_TOKEN",
+  "privateAppPortalId": null,
   "redirectUri": "http://localhost:4179/api/hubspot/oauth/callback",
   "scopes": [
     "oauth",

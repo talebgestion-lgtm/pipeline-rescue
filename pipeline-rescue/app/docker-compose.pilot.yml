@@ -13,6 +13,7 @@ services:
       PIPELINE_RESCUE_ACCESS_TOKEN: change-this-before-deploying
       OPENAI_API_KEY: ""
       HUBSPOT_CLIENT_SECRET: ""
+      HUBSPOT_PRIVATE_APP_TOKEN: ""
     volumes:
       - pipeline_rescue_runtime:/var/lib/pipeline-rescue/runtime
     restart: unless-stopped

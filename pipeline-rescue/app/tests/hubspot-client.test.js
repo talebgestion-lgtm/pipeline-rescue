@@ -9,8 +9,11 @@ const {
 
 const validConfig = {
   enabled: true,
+  authMode: "OAUTH",
   clientId: "client_123",
   clientSecretEnvVar: "HUBSPOT_CLIENT_SECRET",
+  privateAppTokenEnvVar: "HUBSPOT_PRIVATE_APP_TOKEN",
+  privateAppPortalId: null,
   redirectUri: "http://localhost:4179/api/hubspot/oauth/callback",
   scopes: [
     "oauth",
@@ -22,6 +25,21 @@ const validConfig = {
   ],
   optionalScopes: [],
   preferredAccountId: null
+};
+
+const privateAppConfig = {
+  ...validConfig,
+  authMode: "PRIVATE_APP",
+  clientId: "",
+  scopes: [
+    "crm.objects.deals.read",
+    "crm.objects.contacts.read",
+    "crm.objects.tasks.read",
+    "crm.objects.tasks.write",
+    "crm.objects.notes.read",
+    "crm.objects.notes.write"
+  ],
+  privateAppPortalId: "123456"
 };
 
 const requiredInstallScope = validConfig.scopes.join(" ");
@@ -198,6 +216,57 @@ test("loadHubSpotDealPreview normalizes a live HubSpot deal graph", async () => 
   assert.equal(preview.normalizedDeal.hasFutureTask, true);
   assert.equal(preview.normalizedDeal.lastActivityAgeDays, 19);
   assert.match(preview.scenario.guardrailHint, /normalization warning/i);
+});
+
+test("loadHubSpotDealPreview supports private app token mode without OAuth install state", async () => {
+  const observedAuthorizations = [];
+
+  const preview = await loadHubSpotDealPreview({
+    config: privateAppConfig,
+    installState: { installs: [] },
+    dealId: "987",
+    analysisTimestamp: "2026-04-12T10:00:00Z",
+    env: {
+      HUBSPOT_PRIVATE_APP_TOKEN: "pat-na1-private-token"
+    },
+    fetchImpl: async (url, options = {}) => {
+      const parsedUrl = new URL(url);
+      observedAuthorizations.push(options.headers.Authorization);
+
+      if (options.method === "GET" && parsedUrl.pathname === "/crm/v3/objects/deals/987") {
+        return createJsonResponse(200, {
+          id: "987",
+          createdAt: "2026-03-01T10:00:00Z",
+          updatedAt: "2026-04-10T10:00:00Z",
+          archived: false,
+          properties: {
+            dealname: "Acme Private App",
+            amount: "12000",
+            closedate: "2026-05-10",
+            dealstage: "proposal",
+            pipeline: "default",
+            hs_lastactivitydate: "2026-03-24T10:00:00Z"
+          }
+        });
+      }
+
+      if (options.method === "GET" && parsedUrl.pathname.startsWith("/crm/v4/objects/deals/987/associations/")) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      if (options.method === "POST" && /\/crm\/v3\/objects\/(contacts|companies|tasks)\/batch\/read$/.test(parsedUrl.pathname)) {
+        return createJsonResponse(200, { results: [] });
+      }
+
+      throw new Error(`Unexpected request: ${options.method || "GET"} ${parsedUrl.pathname}`);
+    }
+  });
+
+  assert.equal(preview.source.authMode, "PRIVATE_APP");
+  assert.equal(preview.source.portalId, "123456");
+  assert.equal(preview.source.tokenRefreshed, false);
+  assert.equal(preview.normalizedDeal.name, "Acme Private App");
+  assert.ok(observedAuthorizations.every((value) => value === "Bearer pat-na1-private-token"));
 });
 
 test("loadHubSpotDealPreview requires portal selection when multiple installs are stored", async () => {

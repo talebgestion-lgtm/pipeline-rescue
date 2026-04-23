@@ -86,6 +86,7 @@ It now has:
 - persisted live-provider configuration and readiness checks
 - live provider probe and focused-deal live draft path
 - HubSpot OAuth config, install URL, and local install persistence
+- HubSpot Private App token mode for simple single-account local pilots without a website or OAuth app setup
 - live HubSpot deal preview with local token refresh and deterministic normalization
 - live HubSpot owner-name enrichment from the Owners API with safe fallback
 - idempotent live HubSpot task writes that avoid duplicate open rescue tasks

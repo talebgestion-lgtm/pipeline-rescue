@@ -350,3 +350,18 @@ For HubSpot OAuth:
 9. use `Create Live HubSpot Task` only after validating the live preview and recommendation
 10. use `Generate Live HubSpot Draft` to get either a provider-live draft or a deterministic fallback
 11. use `Save Draft As HubSpot Note` to persist the current rescue draft on the HubSpot record
+
+For a simpler single-account local pilot, use HubSpot Private App mode:
+
+1. create a HubSpot Private App in your HubSpot account
+2. grant these scopes:
+   - `crm.objects.deals.read`
+   - `crm.objects.contacts.read`
+   - `crm.objects.tasks.read`
+   - `crm.objects.tasks.write`
+   - `crm.objects.notes.read`
+   - `crm.objects.notes.write`
+3. copy the Private App access token into `.env` as `HUBSPOT_PRIVATE_APP_TOKEN`
+4. set HubSpot auth mode to `PRIVATE_APP` in the app
+5. save the HubSpot config
+6. load a real HubSpot deal ID

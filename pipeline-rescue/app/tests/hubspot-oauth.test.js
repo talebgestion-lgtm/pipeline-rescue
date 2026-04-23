@@ -10,12 +10,31 @@ const {
 
 const validConfig = {
   enabled: true,
+  authMode: "OAUTH",
   clientId: "client_123",
   clientSecretEnvVar: "HUBSPOT_CLIENT_SECRET",
+  privateAppTokenEnvVar: "HUBSPOT_PRIVATE_APP_TOKEN",
+  privateAppPortalId: null,
   redirectUri: "http://localhost:4179/api/hubspot/oauth/callback",
   scopes: ["oauth", "crm.objects.deals.read"],
   optionalScopes: ["crm.objects.tasks.write"],
   preferredAccountId: null
+};
+
+const privateAppConfig = {
+  ...validConfig,
+  authMode: "PRIVATE_APP",
+  clientId: "",
+  scopes: [
+    "crm.objects.deals.read",
+    "crm.objects.contacts.read",
+    "crm.objects.tasks.read",
+    "crm.objects.tasks.write",
+    "crm.objects.notes.read",
+    "crm.objects.notes.write"
+  ],
+  optionalScopes: [],
+  privateAppPortalId: "123456"
 };
 
 test("buildHubSpotInstallUrl builds the expected OAuth URL", () => {
@@ -61,6 +80,26 @@ test("createHubSpotStatus requires reinstall when stored installs miss required 
   assert.equal(report.status, "REINSTALL_REQUIRED");
   assert.match(report.summary, /fresh OAuth install/i);
   assert.deepEqual(report.installs[0].missingRequiredScopes, ["crm.objects.notes.write"]);
+});
+
+test("createHubSpotStatus reports ready for private app token mode", () => {
+  const report = createHubSpotStatus({
+    config: privateAppConfig,
+    env: { HUBSPOT_PRIVATE_APP_TOKEN: "pat-na1-token" },
+    installState: { installs: [] }
+  });
+
+  assert.equal(report.status, "READY");
+  assert.equal(report.configSnapshot.authMode, "PRIVATE_APP");
+  assert.equal(report.configSnapshot.privateAppTokenEnvVar, "HUBSPOT_PRIVATE_APP_TOKEN");
+  assert.equal(report.installCount, 0);
+});
+
+test("private app mode accepts CRM scopes without oauth", () => {
+  const config = validateHubSpotConfigPayload(privateAppConfig);
+
+  assert.equal(config.authMode, "PRIVATE_APP");
+  assert.equal(config.scopes.includes("oauth"), false);
 });
 
 test("getMissingRequiredScopes returns the exact missing scope delta", () => {

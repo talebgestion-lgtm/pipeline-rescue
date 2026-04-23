@@ -21,12 +21,28 @@ function validateHubSpotConfigPayload(payload) {
     throw invalidHubSpotConfig("HubSpot config enabled must be boolean.");
   }
 
+  const authMode = payload.authMode == null ? "OAUTH" : String(payload.authMode).trim().toUpperCase();
+  if (authMode !== "OAUTH" && authMode !== "PRIVATE_APP") {
+    throw invalidHubSpotConfig("HubSpot config authMode must be OAUTH or PRIVATE_APP.");
+  }
+
   if (typeof payload.clientId !== "string") {
     throw invalidHubSpotConfig("HubSpot config clientId must be a string.");
   }
 
   if (typeof payload.clientSecretEnvVar !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(payload.clientSecretEnvVar)) {
     throw invalidHubSpotConfig("HubSpot config clientSecretEnvVar must be an uppercase environment variable name.");
+  }
+
+  const privateAppTokenEnvVar = payload.privateAppTokenEnvVar == null
+    ? "HUBSPOT_PRIVATE_APP_TOKEN"
+    : String(payload.privateAppTokenEnvVar).trim();
+  if (!/^[A-Z][A-Z0-9_]*$/.test(privateAppTokenEnvVar)) {
+    throw invalidHubSpotConfig("HubSpot config privateAppTokenEnvVar must be an uppercase environment variable name.");
+  }
+
+  if (payload.privateAppPortalId != null && payload.privateAppPortalId !== "" && !/^\d+$/.test(String(payload.privateAppPortalId))) {
+    throw invalidHubSpotConfig("HubSpot config privateAppPortalId must be numeric when provided.");
   }
 
   if (typeof payload.redirectUri !== "string" || !payload.redirectUri.trim()) {
@@ -43,7 +59,7 @@ function validateHubSpotConfigPayload(payload) {
     throw invalidHubSpotConfig("HubSpot config scopes must be a non-empty string array.");
   }
 
-  if (!payload.scopes.includes("oauth")) {
+  if (authMode === "OAUTH" && !payload.scopes.includes("oauth")) {
     throw invalidHubSpotConfig("HubSpot config scopes must include oauth.");
   }
 
@@ -57,8 +73,13 @@ function validateHubSpotConfigPayload(payload) {
 
   return {
     enabled: payload.enabled,
+    authMode,
     clientId: payload.clientId.trim(),
     clientSecretEnvVar: payload.clientSecretEnvVar.trim(),
+    privateAppTokenEnvVar,
+    privateAppPortalId: payload.privateAppPortalId == null || payload.privateAppPortalId === ""
+      ? null
+      : String(payload.privateAppPortalId),
     redirectUri: payload.redirectUri.trim(),
     scopes: payload.scopes.map((item) => item.trim()),
     optionalScopes: payload.optionalScopes.map((item) => item.trim()),
@@ -105,6 +126,69 @@ function getMissingRequiredScopes(config, installRecord) {
 function createHubSpotStatus({ config, env = process.env, installState = createDefaultInstallState() }) {
   const normalizedConfig = validateHubSpotConfigPayload(config);
   const normalizedInstallState = normalizeInstallState(installState);
+  const privateAppTokenPresent = Boolean(env[normalizedConfig.privateAppTokenEnvVar]);
+
+  if (normalizedConfig.authMode === "PRIVATE_APP") {
+    const blockers = [];
+    if (!normalizedConfig.enabled) {
+      blockers.push("HubSpot integration is disabled.");
+    }
+    if (!privateAppTokenPresent) {
+      blockers.push(`Missing ${normalizedConfig.privateAppTokenEnvVar} in the process environment.`);
+    }
+
+    const status = !normalizedConfig.enabled
+      ? "DISABLED"
+      : privateAppTokenPresent
+        ? "READY"
+        : "CONFIGURED_BLOCKED";
+
+    return {
+      status,
+      summary:
+        status === "READY"
+          ? "HubSpot Private App token is configured for this local instance."
+          : status === "CONFIGURED_BLOCKED"
+            ? "HubSpot Private App mode is enabled but the token is missing."
+            : "HubSpot live integration is disabled.",
+      checks: [
+        {
+          status: normalizedConfig.enabled ? "PASS" : "WARN",
+          label: "Integration enabled",
+          detail: normalizedConfig.enabled ? "HubSpot integration is enabled." : "HubSpot integration is disabled."
+        },
+        {
+          status: "PASS",
+          label: "Auth mode",
+          detail: "Private App token mode is selected."
+        },
+        {
+          status: privateAppTokenPresent ? "PASS" : "WARN",
+          label: "Private App token environment",
+          detail: privateAppTokenPresent
+            ? `${normalizedConfig.privateAppTokenEnvVar} is present.`
+            : `${normalizedConfig.privateAppTokenEnvVar} is missing.`
+        },
+        {
+          status: normalizedConfig.scopes.length > 0 ? "PASS" : "WARN",
+          label: "Declared scopes",
+          detail: `${normalizedConfig.scopes.filter((scope) => scope !== "oauth").length} non-OAuth scope(s) declared for operator guidance.`
+        }
+      ],
+      blockers,
+      installCount: 0,
+      configSnapshot: {
+        authMode: normalizedConfig.authMode,
+        privateAppTokenEnvVar: normalizedConfig.privateAppTokenEnvVar,
+        privateAppPortalId: normalizedConfig.privateAppPortalId,
+        scopes: normalizedConfig.scopes.filter((scope) => scope !== "oauth"),
+        optionalScopes: normalizedConfig.optionalScopes,
+        preferredAccountId: normalizedConfig.preferredAccountId
+      },
+      installs: []
+    };
+  }
+
   const clientSecretPresent = Boolean(env[normalizedConfig.clientSecretEnvVar]);
   const installCount = normalizedInstallState.installs.length;
   const configReady = Boolean(normalizedConfig.clientId) && Boolean(normalizedConfig.redirectUri) && normalizedConfig.scopes.length > 0;
@@ -199,8 +283,11 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
     blockers,
     installCount,
     configSnapshot: {
+      authMode: normalizedConfig.authMode,
       clientId: normalizedConfig.clientId,
       clientSecretEnvVar: normalizedConfig.clientSecretEnvVar,
+      privateAppTokenEnvVar: normalizedConfig.privateAppTokenEnvVar,
+      privateAppPortalId: normalizedConfig.privateAppPortalId,
       redirectUri: normalizedConfig.redirectUri,
       scopes: normalizedConfig.scopes,
       optionalScopes: normalizedConfig.optionalScopes,
@@ -218,6 +305,10 @@ function createHubSpotStatus({ config, env = process.env, installState = createD
 
 function buildHubSpotInstallUrl({ config, state, accountId }) {
   const normalizedConfig = validateHubSpotConfigPayload(config);
+  if (normalizedConfig.authMode !== "OAUTH") {
+    throw invalidHubSpotConfig("HubSpot install URL is only available in OAuth mode.");
+  }
+
   if (!normalizedConfig.clientId) {
     throw invalidHubSpotConfig("HubSpot client ID is required to build the install URL.");
   }
@@ -244,6 +335,10 @@ function buildHubSpotInstallUrl({ config, state, accountId }) {
 
 async function exchangeHubSpotAuthCode({ config, code, env = process.env, fetchImpl = globalThis.fetch }) {
   const normalizedConfig = validateHubSpotConfigPayload(config);
+  if (normalizedConfig.authMode !== "OAUTH") {
+    throw invalidHubSpotConfig("HubSpot OAuth code exchange is only available in OAuth mode.");
+  }
+
   if (!normalizedConfig.clientId) {
     throw invalidHubSpotConfig("HubSpot client ID is required for token exchange.");
   }

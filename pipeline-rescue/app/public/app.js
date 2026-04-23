@@ -1238,6 +1238,10 @@ function renderHubSpotStatus(report) {
         <span class="verification-value">${report.status}</span>
       </article>
       <article class="verification-metric">
+        <span class="score-label">Auth mode</span>
+        <span class="verification-value">${report.configSnapshot?.authMode || "OAUTH"}</span>
+      </article>
+      <article class="verification-metric">
         <span class="score-label">Stored installs</span>
         <span class="verification-value">${report.installCount ?? 0}</span>
       </article>
@@ -1268,8 +1272,18 @@ function renderHubSpotStatus(report) {
 }
 
 function renderHubSpotConfigForm(config) {
+  const authMode = config.authMode || "OAUTH";
   document.getElementById("hubspot-config-form").innerHTML = `
     <label class="verification-note"><input type="checkbox" id="hubspot-enabled-input" ${config.enabled ? "checked" : ""}> HubSpot integration enabled</label>
+    <label class="score-label" for="hubspot-auth-mode-input">Auth mode</label>
+    <select id="hubspot-auth-mode-input" class="scenario-select">
+      <option value="PRIVATE_APP" ${authMode === "PRIVATE_APP" ? "selected" : ""}>Private App token (recommended local)</option>
+      <option value="OAUTH" ${authMode === "OAUTH" ? "selected" : ""}>OAuth install flow</option>
+    </select>
+    <label class="score-label" for="hubspot-private-token-env-input">Private App token env var</label>
+    <input id="hubspot-private-token-env-input" class="scenario-select" value="${escapeHtml(config.privateAppTokenEnvVar || "HUBSPOT_PRIVATE_APP_TOKEN")}">
+    <label class="score-label" for="hubspot-private-portal-input">Private App portal ID</label>
+    <input id="hubspot-private-portal-input" class="scenario-select" value="${escapeHtml(config.privateAppPortalId || "")}" placeholder="Optional numeric HubSpot portal ID">
     <label class="score-label" for="hubspot-client-id-input">Client ID</label>
     <input id="hubspot-client-id-input" class="scenario-select" value="${escapeHtml(config.clientId)}">
     <label class="score-label" for="hubspot-secret-env-input">Client secret env var</label>
@@ -1323,6 +1337,10 @@ function renderHubSpotLivePreview(preview) {
       <article class="verification-metric">
         <span class="score-label">Portal</span>
         <span class="verification-value">${escapeHtml(preview.source?.portalId || "unknown")}</span>
+      </article>
+      <article class="verification-metric">
+        <span class="score-label">Auth</span>
+        <span class="verification-value">${escapeHtml(preview.source?.authMode || "OAUTH")}</span>
       </article>
       <article class="verification-metric">
         <span class="score-label">Deal</span>
@@ -1452,7 +1470,7 @@ function renderHubSpotLiveQueue(payload) {
   container.innerHTML = `
     <div class="verification-block">
       <p class="score-label">Source</p>
-      <p class="verification-note">${escapeHtml(payload.source?.mode || "HUBSPOT_LIVE_QUEUE")} | ${escapeHtml(criteriaSummary)}</p>
+      <p class="verification-note">${escapeHtml(payload.source?.mode || "HUBSPOT_LIVE_QUEUE")} | ${escapeHtml(payload.source?.authMode || "OAUTH")} | ${escapeHtml(criteriaSummary)}</p>
       <p class="verification-note">Discovered deals: ${discoveredDealIds.length > 0 ? escapeHtml(discoveredDealIds.join(", ")) : "none"}</p>
     </div>
     <div class="verification-grid">
@@ -1645,8 +1663,11 @@ function collectHubSpotConfigForm() {
 
   return {
     enabled: document.getElementById("hubspot-enabled-input").checked,
+    authMode: document.getElementById("hubspot-auth-mode-input").value,
     clientId: document.getElementById("hubspot-client-id-input").value.trim(),
     clientSecretEnvVar: document.getElementById("hubspot-secret-env-input").value.trim(),
+    privateAppTokenEnvVar: document.getElementById("hubspot-private-token-env-input").value.trim(),
+    privateAppPortalId: document.getElementById("hubspot-private-portal-input").value.trim() || null,
     redirectUri: document.getElementById("hubspot-redirect-uri-input").value.trim(),
     scopes: parseLines(document.getElementById("hubspot-scopes-input").value),
     optionalScopes: parseLines(document.getElementById("hubspot-optional-scopes-input").value),

@@ -207,6 +207,28 @@ function ensureHubSpotReady(config, installState, portalId, env = process.env) {
     throw createHubSpotClientError(status.summary, 409, status.blockers.join(" "));
   }
 
+  if (normalizedConfig.authMode === "PRIVATE_APP") {
+    const accessToken = env[normalizedConfig.privateAppTokenEnvVar];
+    if (!accessToken) {
+      throw createHubSpotClientError(`Missing ${normalizedConfig.privateAppTokenEnvVar} in the process environment.`, 409);
+    }
+
+    return {
+      config: normalizedConfig,
+      installState: normalizedInstallState,
+      install: {
+        portalId: portalId || normalizedConfig.privateAppPortalId || "private-app",
+        hubDomain: null,
+        accessToken,
+        refreshToken: null,
+        tokenType: "private_app",
+        scope: normalizedConfig.scopes.filter((scope) => scope !== "oauth").join(" "),
+        connectedAt: null,
+        authMode: "PRIVATE_APP"
+      }
+    };
+  }
+
   const targetPortalId = portalId || normalizedConfig.preferredAccountId || null;
   const install = chooseInstallRecord(normalizedInstallState, targetPortalId);
 
@@ -750,6 +772,7 @@ function buildPreviewPayload({ liveSession, dealId, dealRecord, normalizedDeal, 
   return {
     source: {
       mode: "HUBSPOT_LIVE",
+      authMode: liveSession.config.authMode,
       portalId: activeInstall.portalId,
       hubDomain: activeInstall.hubDomain || null,
       dealId,
@@ -1110,9 +1133,10 @@ async function searchHubSpotDeals(options) {
       searchRequest,
       dealIds,
       source: {
-        portalId: String(liveSession.getInstall().portalId),
-        hubDomain: liveSession.getInstall().hubDomain || null,
-        fetchedAt: liveSession.analysisTimestamp,
+      portalId: String(liveSession.getInstall().portalId),
+      hubDomain: liveSession.getInstall().hubDomain || null,
+      authMode: liveSession.config.authMode,
+      fetchedAt: liveSession.analysisTimestamp,
         tokenRefreshed: liveSession.getTokenRefreshed(),
         dealCount: dealIds.length
       },
@@ -1151,6 +1175,7 @@ async function createHubSpotRescueTask(options) {
 
     return {
       source: {
+        authMode: liveSession.config.authMode,
         portalId: liveSession.getInstall().portalId,
         hubDomain: liveSession.getInstall().hubDomain || null,
         tokenRefreshed: liveSession.getTokenRefreshed(),
@@ -1255,6 +1280,7 @@ async function createHubSpotDraftNote(options) {
 
     return {
       source: {
+        authMode: liveSession.config.authMode,
         portalId: liveSession.getInstall().portalId,
         hubDomain: liveSession.getInstall().hubDomain || null,
         tokenRefreshed: liveSession.getTokenRefreshed(),
